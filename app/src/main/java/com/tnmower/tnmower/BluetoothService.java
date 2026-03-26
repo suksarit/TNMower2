@@ -3,6 +3,8 @@ package com.tnmower.tnmower;
 import android.app.*;
 import android.bluetooth.*;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.Manifest;
 import android.os.*;
 import androidx.core.app.NotificationCompat;
 
@@ -22,6 +24,7 @@ public class BluetoothService extends Service {
     private OutputStream output;
 
     private final String MAC = "00:21:13:00:00:00";
+
     private final UUID UUID_SPP =
             UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
@@ -29,6 +32,8 @@ public class BluetoothService extends Service {
     private final AtomicBoolean connected = new AtomicBoolean(false);
 
     private final LinkedBlockingQueue<String> txQueue = new LinkedBlockingQueue<>();
+
+    private int seq = 0;
 
     // ==================================================
     @Override
@@ -43,15 +48,36 @@ public class BluetoothService extends Service {
     }
 
     // ==================================================
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+
+        if (intent != null && intent.hasExtra("cmd")) {
+
+            String cmd = intent.getStringExtra("cmd");
+
+            if ("STOP".equals(cmd)) {
+                sendPacket("CMD", "STOP");
+            }
+        }
+
+        return START_STICKY;
+    }
+
+    // ==================================================
     private void startForegroundService() {
 
-        NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "TN Mower BT",
-                NotificationManager.IMPORTANCE_LOW);
+        NotificationManager nm =
+                (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(channel);
+        // 🔴 FIX API 26+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "TN Mower BT",
+                    NotificationManager.IMPORTANCE_LOW
+            );
+            nm.createNotificationChannel(channel);
+        }
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("TN Mower")
@@ -80,6 +106,16 @@ public class BluetoothService extends Service {
 
         try {
 
+            // 🔴 FIX Android 12+ permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
+                        != PackageManager.PERMISSION_GRANTED) {
+
+                    sendStatus("NO_PERMISSION");
+                    return;
+                }
+            }
+
             btAdapter.cancelDiscovery();
 
             BluetoothDevice device = btAdapter.getRemoteDevice(MAC);
@@ -92,10 +128,20 @@ public class BluetoothService extends Service {
 
             connected.set(true);
 
+            sendStatus("CONNECTED");
+
             new Thread(this::rxLoop).start();
 
-        } catch (Exception e) {
+        } catch (SecurityException se) {
+
             connected.set(false);
+            sendStatus("NO_PERMISSION");
+            safeClose();
+
+        } catch (Exception e) {
+
+            connected.set(false);
+            sendStatus("DISCONNECTED");
             safeClose();
         }
     }
@@ -121,7 +167,9 @@ public class BluetoothService extends Service {
                 }
 
             } catch (Exception e) {
+
                 connected.set(false);
+                sendStatus("DISCONNECTED");
                 safeClose();
                 break;
             }
@@ -134,6 +182,7 @@ public class BluetoothService extends Service {
         while (running.get()) {
 
             try {
+
                 String msg = txQueue.take();
 
                 if (connected.get() && output != null) {
@@ -146,13 +195,65 @@ public class BluetoothService extends Service {
     }
 
     // ==================================================
-    private void handlePacket(String p) {
-        // 🔴 TODO: broadcast ไป UI
+    private void handlePacket(String packet) {
+
+        if (!packet.startsWith("<") || !packet.endsWith(">")) return;
+
+        try {
+
+            packet = packet.substring(1, packet.length() - 1);
+
+            String[] parts = packet.split(",");
+
+            if (parts.length < 4) return;
+
+            String raw = parts[0] + "," + parts[1] + "," + parts[2];
+
+            if (!calcCRC(raw).equals(parts[3])) return;
+
+            String type = parts[1];
+            String data = parts[2];
+
+            if (type.equals("TEL")) {
+
+                Intent intent = new Intent("TNMOWER_TELEMETRY");
+                intent.putExtra("data", data);
+                sendBroadcast(intent);
+            }
+
+        } catch (Exception ignored) {}
     }
 
     // ==================================================
-    public void send(String msg) {
-        txQueue.offer(msg);
+    private void sendPacket(String type, String data) {
+
+        seq++;
+
+        String raw = seq + "," + type + "," + data;
+        String crc = calcCRC(raw);
+
+        String packet = "<" + raw + "," + crc + ">";
+        txQueue.offer(packet);
+    }
+
+    // ==================================================
+    private void sendStatus(String status) {
+
+        Intent intent = new Intent("TNMOWER_STATUS");
+        intent.putExtra("status", status);
+        sendBroadcast(intent);
+    }
+
+    // ==================================================
+    private String calcCRC(String data) {
+
+        int crc = 0;
+
+        for (int i = 0; i < data.length(); i++) {
+            crc ^= data.charAt(i);
+        }
+
+        return String.format("%02X", crc);
     }
 
     // ==================================================
