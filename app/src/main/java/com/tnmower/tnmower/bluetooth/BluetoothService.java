@@ -8,6 +8,8 @@ import android.Manifest;
 import android.os.*;
 import androidx.core.app.NotificationCompat;
 
+import com.tnmower.tnmower.utils.CRCUtil;
+
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.UUID;
@@ -43,6 +45,7 @@ public class BluetoothService extends Service {
         btAdapter = BluetoothAdapter.getDefaultAdapter();
 
         startForegroundService();
+
         new Thread(this::connectionLoop).start();
         new Thread(this::txLoop).start();
     }
@@ -69,7 +72,6 @@ public class BluetoothService extends Service {
         NotificationManager nm =
                 (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
-        // 🔴 FIX API 26+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
@@ -89,24 +91,32 @@ public class BluetoothService extends Service {
     }
 
     // ==================================================
+    // 🔴 AUTO RECONNECT LOOP (แก้แล้ว)
+    // ==================================================
     private void connectionLoop() {
 
         while (running.get()) {
 
             if (!connected.get()) {
+
+                sendStatus("RECONNECTING");
+
                 connect();
+
+                SystemClock.sleep(3000); // รอ 3 วิ
             }
 
-            SystemClock.sleep(2000);
+            SystemClock.sleep(500);
         }
     }
 
+    // ==================================================
+    // 🔴 CONNECT (แก้แล้ว)
     // ==================================================
     private void connect() {
 
         try {
 
-            // 🔴 FIX Android 12+ permission
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
                         != PackageManager.PERMISSION_GRANTED) {
@@ -115,6 +125,8 @@ public class BluetoothService extends Service {
                     return;
                 }
             }
+
+            sendStatus("CONNECTING");
 
             btAdapter.cancelDiscovery();
 
@@ -132,20 +144,18 @@ public class BluetoothService extends Service {
 
             new Thread(this::rxLoop).start();
 
-        } catch (SecurityException se) {
-
-            connected.set(false);
-            sendStatus("NO_PERMISSION");
-            safeClose();
-
         } catch (Exception e) {
 
             connected.set(false);
+
             sendStatus("DISCONNECTED");
+
             safeClose();
         }
     }
 
+    // ==================================================
+    // 🔴 RX LOOP (แก้แล้ว)
     // ==================================================
     private void rxLoop() {
 
@@ -169,8 +179,11 @@ public class BluetoothService extends Service {
             } catch (Exception e) {
 
                 connected.set(false);
-                sendStatus("DISCONNECTED");
+
+                sendStatus("LOST_CONNECTION");
+
                 safeClose();
+
                 break;
             }
         }
@@ -209,15 +222,24 @@ public class BluetoothService extends Service {
 
             String raw = parts[0] + "," + parts[1] + "," + parts[2];
 
-            if (!calcCRC(raw).equals(parts[3])) return;
+            if (!CRCUtil.calcCRC(raw).equals(parts[3])) return;
 
             String type = parts[1];
             String data = parts[2];
 
             if (type.equals("TEL")) {
 
+                String[] d = data.split(",");
+
+                float volt = Float.parseFloat(d[0].split(":")[1]);
+                float current = Float.parseFloat(d[1].split(":")[1]);
+                float temp = Float.parseFloat(d[2].split(":")[1]);
+
                 Intent intent = new Intent("TNMOWER_TELEMETRY");
-                intent.putExtra("data", data);
+                intent.putExtra("volt", volt);
+                intent.putExtra("current", current);
+                intent.putExtra("temp", temp);
+
                 sendBroadcast(intent);
             }
 
@@ -230,7 +252,8 @@ public class BluetoothService extends Service {
         seq++;
 
         String raw = seq + "," + type + "," + data;
-        String crc = calcCRC(raw);
+
+        String crc = CRCUtil.calcCRC(raw);
 
         String packet = "<" + raw + "," + crc + ">";
         txQueue.offer(packet);
@@ -242,18 +265,6 @@ public class BluetoothService extends Service {
         Intent intent = new Intent("TNMOWER_STATUS");
         intent.putExtra("status", status);
         sendBroadcast(intent);
-    }
-
-    // ==================================================
-    private String calcCRC(String data) {
-
-        int crc = 0;
-
-        for (int i = 0; i < data.length(); i++) {
-            crc ^= data.charAt(i);
-        }
-
-        return String.format("%02X", crc);
     }
 
     // ==================================================
@@ -277,3 +288,4 @@ public class BluetoothService extends Service {
         return null;
     }
 }
+

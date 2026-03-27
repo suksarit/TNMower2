@@ -12,6 +12,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.tnmower.tnmower.R;
+import com.tnmower.tnmower.bluetooth.BluetoothService;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -24,21 +25,13 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
 
-            String data = intent.getStringExtra("data");
-            if (data == null) return;
+            float volt = intent.getFloatExtra("volt", 0);
+            float current = intent.getFloatExtra("current", 0);
+            float temp = intent.getFloatExtra("temp", 0);
 
-            try {
-                String[] d = data.split(",");
-
-                String v = d[0].split(":")[1];
-                String i = d[1].split(":")[1];
-                String t = d[2].split(":")[1];
-
-                txtVolt.setText("Volt: " + v);
-                txtCurrent.setText("Current: " + i);
-                txtTemp.setText("Temp: " + t);
-
-            } catch (Exception ignored) {}
+            txtVolt.setText("Volt: " + volt);
+            txtCurrent.setText("Current: " + current);
+            txtTemp.setText("Temp: " + temp);
         }
     };
 
@@ -56,6 +49,8 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    // ==================================================
+    // onCreate
     // ==================================================
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,14 +93,28 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // ==================================================
-        // START SERVICE
+        // START SERVICE (แก้ API 26)
         // ==================================================
-        startService(new Intent(this, BluetoothService.class));
-
-        btnConnect.setOnClickListener(v -> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(new Intent(this, BluetoothService.class));
+        } else {
             startService(new Intent(this, BluetoothService.class));
+        }
+
+        // ==================================================
+        // BUTTON CONNECT (แก้ API 26)
+        // ==================================================
+        btnConnect.setOnClickListener(v -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(new Intent(this, BluetoothService.class));
+            } else {
+                startService(new Intent(this, BluetoothService.class));
+            }
         });
 
+        // ==================================================
+        // BUTTON STOP
+        // ==================================================
         btnStop.setOnClickListener(v -> {
             Intent intent = new Intent(this, BluetoothService.class);
             intent.putExtra("cmd", "STOP");
@@ -156,3 +165,4 @@ public class MainActivity extends AppCompatActivity {
         try { unregisterReceiver(statusReceiver); } catch (Exception ignored) {}
     }
 }
+

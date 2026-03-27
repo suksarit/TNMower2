@@ -1,74 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:padding="16dp"
-    android:background="#121212"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:padding="16dp"
+    tools:context=".ui.MainActivity">
 
     <LinearLayout
-        android:orientation="vertical"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
 
         <!-- CONNECT -->
         <Button
             android:id="@+id/btnConnect"
-            android:text="CONNECT"
-            android:textSize="18sp"
             android:layout_width="match_parent"
-            android:layout_height="60dp"/>
+            android:layout_height="60dp"
+            android:text="CONNECT"
+            android:textSize="18sp" />
 
         <!-- EMERGENCY STOP -->
         <Button
             android:id="@+id/btnStop"
-            android:text="EMERGENCY STOP"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF"
-            android:background="@android:color/holo_red_dark"
             android:layout_width="match_parent"
             android:layout_height="80dp"
-            android:layout_marginTop="12dp"/>
+            android:layout_marginTop="12dp"
+            android:background="@android:color/holo_red_dark"
+            android:text="EMERGENCY STOP"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
         <!-- STATUS -->
         <TextView
             android:id="@+id/txtStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
             android:text="Status: Disconnected"
             android:textColor="#FFFFFF"
-            android:textSize="18sp"
+            android:textSize="18sp" />
+
+        <!-- ========================= -->
+        <!-- GAUGE ROW -->
+        <!-- ========================= -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            android:gravity="center"
+            android:orientation="horizontal">
 
-        <!-- VOLT -->
-        <TextView
-            android:id="@+id/txtVolt"
-            android:text="Volt: -"
-            android:textColor="#00FF00"
-            android:textSize="18sp"
-            android:layout_marginTop="16dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            <!-- VOLT -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
 
-        <!-- CURRENT -->
-        <TextView
-            android:id="@+id/txtCurrent"
-            android:text="Current: -"
-            android:textColor="#FFFF00"
-            android:textSize="18sp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+                <com.tnmower.tnmower.ui.GaugeView
+                    android:id="@+id/gaugeVolt"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp" />
 
-        <!-- TEMP -->
-        <TextView
-            android:id="@+id/txtTemp"
-            android:text="Temp: -"
-            android:textColor="#FF8800"
-            android:textSize="18sp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+                <TextView
+                    android:id="@+id/txtVolt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Volt: -"
+                    android:textColor="#00FF00"
+                    android:textSize="16sp" />
+            </LinearLayout>
+
+            <!-- CURRENT -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <com.tnmower.tnmower.ui.GaugeView
+                    android:id="@+id/gaugeCurrent"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp" />
+
+                <TextView
+                    android:id="@+id/txtCurrent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Current: -"
+                    android:textColor="#FFFF00"
+                    android:textSize="16sp" />
+            </LinearLayout>
+
+            <!-- TEMP -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <com.tnmower.tnmower.ui.GaugeView
+                    android:id="@+id/gaugeTemp"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp" />
+
+                <TextView
+                    android:id="@+id/txtTemp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Temp: -"
+                    android:textColor="#FF8800"
+                    android:textSize="16sp" />
+            </LinearLayout>
+
+        </LinearLayout>
 
     </LinearLayout>
 
 </ScrollView>
+
