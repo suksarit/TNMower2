@@ -1,4 +1,4 @@
-# 🌿 TN Mower
+# 🌿 TN Mower App
 
 แอป Android สำหรับควบคุมและรับข้อมูลจากระบบ **TN Mower** ผ่าน Bluetooth  
 ใช้ร่วมกับ Arduino / ระบบควบคุมมอเตอร์ (รถตัดหญ้า)
