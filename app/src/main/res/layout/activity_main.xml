@@ -13,64 +13,23 @@
         android:orientation="vertical">
 
         <!-- ========================= -->
-        <!-- CONNECT / DISCONNECT -->
-        <!-- ========================= -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btnConnect"
-                android:layout_width="0dp"
-                android:layout_height="60dp"
-                android:layout_weight="1"
-                android:text="@string/btn_connect"
-                android:textSize="16sp" />
-
-            <Button
-                android:id="@+id/btnDisconnect"
-                android:layout_width="0dp"
-                android:layout_height="60dp"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="@string/btn_disconnect"
-                android:textSize="16sp" />
-        </LinearLayout>
-
-        <!-- ========================= -->
-        <!-- EMERGENCY STOP -->
-        <!-- ========================= -->
-        <Button
-            android:id="@+id/btnStop"
-            android:layout_width="match_parent"
-            android:layout_height="80dp"
-            android:layout_marginTop="12dp"
-            android:background="@android:color/holo_red_dark"
-            android:text="@string/btn_emergency"
-            android:textColor="#FFFFFF"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <!-- ========================= -->
         <!-- STATUS -->
         <!-- ========================= -->
         <TextView
             android:id="@+id/txtStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
             android:text="@string/status_disconnected"
             android:textColor="#FFFFFF"
             android:textSize="18sp" />
 
         <!-- ========================= -->
-        <!-- GAUGE ROW -->
+        <!-- GAUGE (ย้ายขึ้นบน) -->
         <!-- ========================= -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="16dp"
             android:gravity="center"
             android:orientation="horizontal">
 
@@ -144,6 +103,47 @@
             </LinearLayout>
 
         </LinearLayout>
+
+        <!-- ========================= -->
+        <!-- CONNECT / DISCONNECT -->
+        <!-- ========================= -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnConnect"
+                android:layout_width="0dp"
+                android:layout_height="60dp"
+                android:layout_weight="1"
+                android:text="@string/btn_connect"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/btnDisconnect"
+                android:layout_width="0dp"
+                android:layout_height="60dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_disconnect"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <!-- ========================= -->
+        <!-- EMERGENCY STOP -->
+        <!-- ========================= -->
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="match_parent"
+            android:layout_height="80dp"
+            android:layout_marginTop="12dp"
+            android:background="@android:color/holo_red_dark"
+            android:text="@string/btn_emergency"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 
