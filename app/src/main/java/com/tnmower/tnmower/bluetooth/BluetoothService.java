@@ -9,8 +9,6 @@ import android.os.*;
 
 import androidx.core.app.NotificationCompat;
 
-import com.tnmower.tnmower.utils.CRCUtil;
-
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.UUID;
@@ -36,18 +34,10 @@ public class BluetoothService extends Service {
 
     private final LinkedBlockingQueue<String> txQueue = new LinkedBlockingQueue<>();
 
-    private int seq = 0;
-
     // =========================
     // STATUS TRACK
     // =========================
     private String lastStatus = "";
-
-    // =========================
-    // RECONNECT
-    // =========================
-    private long lastConnectAttempt = 0;
-    private int reconnectDelay = 2000;
 
     // =========================
     // TIMEOUT
@@ -56,10 +46,10 @@ public class BluetoothService extends Service {
     private static final long RX_TIMEOUT = 3000;
 
     // =========================
-    // LISTENER
+    // LISTENER (แก้ให้รองรับครบ)
     // =========================
     public interface OnTelemetryListener {
-        void onTelemetry(float volt, float current, float temp);
+        void onTelemetry(float volt, float currentL, float currentR, float tempL, float tempR);
     }
 
     private static OnTelemetryListener telemetryListener;
@@ -79,22 +69,6 @@ public class BluetoothService extends Service {
 
         new Thread(this::connectionLoop).start();
         new Thread(this::txLoop).start();
-    }
-
-    // ==================================================
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-
-        if (intent != null && intent.hasExtra("cmd")) {
-
-            String cmd = intent.getStringExtra("cmd");
-
-            if ("STOP".equals(cmd)) {
-                sendPacket("CMD", "STOP");
-            }
-        }
-
-        return START_STICKY;
     }
 
     // ==================================================
@@ -128,30 +102,17 @@ public class BluetoothService extends Service {
 
             long now = System.currentTimeMillis();
 
-            // 🔴 TIMEOUT → ตัดจริง
             if (connected.get() && (now - lastRxTime > RX_TIMEOUT)) {
                 sendStatus("TIMEOUT");
                 connected.set(false);
                 safeClose();
             }
 
-            // 🔴 CONNECT / RECONNECT
             if (!connected.get()) {
-
-                if (now - lastConnectAttempt > reconnectDelay) {
-
-                    lastConnectAttempt = now;
-
-                    connect();
-
-                    reconnectDelay = Math.min(reconnectDelay + 1000, 8000);
-                }
-
-            } else {
-                reconnectDelay = 2000;
+                connect();
             }
 
-            SystemClock.sleep(300);
+            SystemClock.sleep(500);
         }
     }
 
@@ -163,7 +124,6 @@ public class BluetoothService extends Service {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
                         != PackageManager.PERMISSION_GRANTED) {
-
                     sendStatus("NO_PERMISSION");
                     return;
                 }
@@ -197,31 +157,67 @@ public class BluetoothService extends Service {
     }
 
     // ==================================================
+    // 🔴 NEW: BINARY RX LOOP
+    // ==================================================
     private void rxLoop() {
 
-        StringBuilder buffer = new StringBuilder();
+        byte[] buffer = new byte[32];
 
         while (running.get() && connected.get()) {
 
             try {
 
-                int c = input.read();
+                int b = input.read();
+                if (b == -1) continue;
 
-                if (c == -1) continue;
+                // 🔴 หา HEADER
+                if ((b & 0xFF) != 0xAA) continue;
 
-                buffer.append((char) c);
+                // LEN
+                int len = input.read();
+                if (len <= 0 || len > 20) continue;
 
-                if (c == '>') {
-
-                    String packet = buffer.toString();
-                    buffer.setLength(0);
-
-                    lastRxTime = System.currentTimeMillis();
-
-                    handlePacket(packet);
+                // DATA
+                int read = 0;
+                while (read < len) {
+                    int r = input.read(buffer, read, len - read);
+                    if (r > 0) read += r;
                 }
 
-                if (buffer.length() > 200) buffer.setLength(0);
+                // CRC
+                int crcRx = input.read();
+
+                // 🔴 CRC CHECK
+                int crc = 0xAA ^ len;
+                for (int i = 0; i < len; i++) {
+                    crc ^= buffer[i];
+                }
+
+                if ((crc & 0xFF) != (crcRx & 0xFF)) continue;
+
+                lastRxTime = System.currentTimeMillis();
+
+                // ==================================================
+                // 🔴 DECODE
+                // ==================================================
+                int idx = 0;
+
+                int fault = buffer[idx++] & 0xFF;
+                int sys = buffer[idx++] & 0xFF;
+
+                int v = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+                int iL = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+                int iR = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+                int tL = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+                int tR = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+
+                float volt = v / 100f;
+                float curL = iL / 100f;
+                float curR = iR / 100f;
+
+                if (telemetryListener != null) {
+                    telemetryListener.onTelemetry(volt, curL, curR, tL, tR);
+                }
 
             } catch (Exception e) {
 
@@ -231,42 +227,6 @@ public class BluetoothService extends Service {
                 break;
             }
         }
-    }
-
-    // ==================================================
-    private void handlePacket(String packet) {
-
-        if (!packet.startsWith("<") || !packet.endsWith(">")) return;
-
-        try {
-
-            packet = packet.substring(1, packet.length() - 1);
-
-            String[] parts = packet.split(",");
-
-            if (parts.length < 4) return;
-
-            String raw = parts[0] + "," + parts[1] + "," + parts[2];
-
-            if (!CRCUtil.calcCRC(raw).equals(parts[3])) return;
-
-            String type = parts[1];
-            String data = parts[2];
-
-            if (type.equals("TEL")) {
-
-                String[] d = data.split(",");
-
-                float volt = Float.parseFloat(d[0].split(":")[1]);
-                float current = Float.parseFloat(d[1].split(":")[1]);
-                float temp = Float.parseFloat(d[2].split(":")[1]);
-
-                if (telemetryListener != null) {
-                    telemetryListener.onTelemetry(volt, current, temp);
-                }
-            }
-
-        } catch (Exception ignored) {}
     }
 
     // ==================================================
@@ -288,19 +248,6 @@ public class BluetoothService extends Service {
     }
 
     // ==================================================
-    private void sendPacket(String type, String data) {
-
-        seq++;
-
-        String raw = seq + "," + type + "," + data;
-        String crc = CRCUtil.calcCRC(raw);
-
-        String packet = "<" + raw + "," + crc + ">";
-        txQueue.offer(packet);
-    }
-
-    // ==================================================
-    // 🔴 FIX: กันยิง status ซ้ำ
     private void sendStatus(String status) {
 
         if (status.equals(lastStatus)) return;

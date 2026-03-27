@@ -12,9 +12,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- ========================= -->
         <!-- STATUS -->
-        <!-- ========================= -->
         <TextView
             android:id="@+id/txtStatus"
             android:layout_width="wrap_content"
@@ -23,9 +21,7 @@
             android:textColor="#FFFFFF"
             android:textSize="18sp" />
 
-        <!-- ========================= -->
-        <!-- GAUGE (ย้ายขึ้นบน) -->
-        <!-- ========================= -->
+        <!-- GAUGE -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -77,6 +73,39 @@
                     android:text="@string/label_current"
                     android:textColor="#FFFF00"
                     android:textSize="16sp" />
+
+                <!-- 🔴 4 MOTOR CURRENT -->
+                <TextView
+                    android:id="@+id/txtM1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="M1: 0.00 A"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"/>
+
+                <TextView
+                    android:id="@+id/txtM2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="M2: 0.00 A"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"/>
+
+                <TextView
+                    android:id="@+id/txtM3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="M3: 0.00 A"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"/>
+
+                <TextView
+                    android:id="@+id/txtM4"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="M4: 0.00 A"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"/>
             </LinearLayout>
 
             <!-- TEMP -->
@@ -100,13 +129,28 @@
                     android:text="@string/label_temp"
                     android:textColor="#FF8800"
                     android:textSize="16sp" />
+
+                <!-- TEMP L/R -->
+                <TextView
+                    android:id="@+id/txtTempL"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="L: 0 °C"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"/>
+
+                <TextView
+                    android:id="@+id/txtTempR"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="R: 0 °C"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"/>
             </LinearLayout>
 
         </LinearLayout>
 
-        <!-- ========================= -->
-        <!-- CONNECT / DISCONNECT -->
-        <!-- ========================= -->
+        <!-- CONNECT -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -131,9 +175,7 @@
                 android:textSize="16sp" />
         </LinearLayout>
 
-        <!-- ========================= -->
-        <!-- EMERGENCY STOP -->
-        <!-- ========================= -->
+        <!-- EMERGENCY -->
         <Button
             android:id="@+id/btnStop"
             android:layout_width="match_parent"
