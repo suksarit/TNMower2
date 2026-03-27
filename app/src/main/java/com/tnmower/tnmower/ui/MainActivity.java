@@ -1,4 +1,4 @@
-package com.tnmower.tnmower;
+package com.tnmower.tnmower.ui;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -10,6 +10,8 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.tnmower.tnmower.R;
 
 public class MainActivity extends AppCompatActivity {
 

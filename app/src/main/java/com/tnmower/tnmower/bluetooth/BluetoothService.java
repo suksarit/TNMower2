@@ -1,4 +1,4 @@
-package com.tnmower.tnmower;
+package com.tnmower.tnmower.bluetooth;
 
 import android.app.*;
 import android.bluetooth.*;

@@ -7,19 +7,18 @@
     <!-- 🔴 BLUETOOTH PERMISSION -->
     <!-- ================================================== -->
 
+    <!-- Android 11 ลงไป -->
     <uses-permission android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30"/>
 
+    <!-- Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"/>
 
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30"/>
-
+    <!-- Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!-- ================================================== -->
@@ -45,9 +44,9 @@
         android:theme="@style/Theme.TNMower"
         tools:targetApi="33">
 
-        <!-- 🔴 FIX: ใช้ full path -->
+        <!-- MAIN ACTIVITY -->
         <activity
-            android:name="com.tnmower.tnmower.MainActivity"
+            android:name=".ui.MainActivity"
             android:exported="true">
 
             <intent-filter>
@@ -57,8 +56,9 @@
 
         </activity>
 
+        <!-- BLUETOOTH SERVICE -->
         <service
-            android:name="com.tnmower.tnmower.BluetoothService"
+            android:name=".bluetooth.BluetoothService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
