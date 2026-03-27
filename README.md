@@ -42,7 +42,7 @@
 ## 🔧 การติดตั้ง
 
 ```bash
-git clone https://github.com/USERNAME/TNMower2.git
+git clone https://github.com/USERNAME/TNMowerApp.git
 ```
 
 1. เปิดโปรเจกต์ด้วย Android Studio  
