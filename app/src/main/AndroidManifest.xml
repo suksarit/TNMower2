@@ -3,8 +3,11 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ================================================== -->
-    <!-- 🔴 BLUETOOTH PERMISSION -->
+    <!-- 🔴 PERMISSIONS -->
     <!-- ================================================== -->
+
+    <!-- 🔴 VIBRATE (แก้ error) -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
 
     <!-- Android 11 และต่ำกว่า -->
     <uses-permission android:name="android.permission.BLUETOOTH"
@@ -61,7 +64,7 @@
         </activity>
 
         <!-- ========================= -->
-        <!-- 🔴 DEVICE LIST (เพิ่มใหม่) -->
+        <!-- DEVICE LIST -->
         <!-- ========================= -->
         <activity
             android:name=".ui.DeviceListActivity"

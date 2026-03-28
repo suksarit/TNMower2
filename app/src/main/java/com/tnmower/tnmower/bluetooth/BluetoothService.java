@@ -34,22 +34,16 @@ public class BluetoothService extends Service {
 
     private final LinkedBlockingQueue<String> txQueue = new LinkedBlockingQueue<>();
 
-    // =========================
-    // STATUS TRACK
-    // =========================
     private String lastStatus = "";
 
-    // =========================
-    // TIMEOUT
-    // =========================
     private long lastRxTime = 0;
     private static final long RX_TIMEOUT = 3000;
 
     // =========================
-    // LISTENER (แก้ให้รองรับครบ)
+    // 🔴 NEW: 7 VALUE LISTENER
     // =========================
     public interface OnTelemetryListener {
-        void onTelemetry(float volt, float currentL, float currentR, float tempL, float tempR);
+        void onTelemetry(float volt, float m1, float m2, float m3, float m4, float tempL, float tempR);
     }
 
     private static OnTelemetryListener telemetryListener;
@@ -58,7 +52,6 @@ public class BluetoothService extends Service {
         telemetryListener = listener;
     }
 
-    // ==================================================
     @Override
     public void onCreate() {
         super.onCreate();
@@ -71,7 +64,6 @@ public class BluetoothService extends Service {
         new Thread(this::txLoop).start();
     }
 
-    // ==================================================
     private void startForegroundService() {
 
         NotificationManager nm =
@@ -95,7 +87,6 @@ public class BluetoothService extends Service {
         startForeground(1, notification);
     }
 
-    // ==================================================
     private void connectionLoop() {
 
         while (running.get()) {
@@ -116,7 +107,6 @@ public class BluetoothService extends Service {
         }
     }
 
-    // ==================================================
     private void connect() {
 
         try {
@@ -157,7 +147,7 @@ public class BluetoothService extends Service {
     }
 
     // ==================================================
-    // 🔴 NEW: BINARY RX LOOP
+    // 🔴 RX LOOP (รองรับ M1–M4)
     // ==================================================
     private void rxLoop() {
 
@@ -170,24 +160,19 @@ public class BluetoothService extends Service {
                 int b = input.read();
                 if (b == -1) continue;
 
-                // 🔴 หา HEADER
                 if ((b & 0xFF) != 0xAA) continue;
 
-                // LEN
                 int len = input.read();
-                if (len <= 0 || len > 20) continue;
+                if (len <= 0 || len > 24) continue;
 
-                // DATA
                 int read = 0;
                 while (read < len) {
                     int r = input.read(buffer, read, len - read);
                     if (r > 0) read += r;
                 }
 
-                // CRC
                 int crcRx = input.read();
 
-                // 🔴 CRC CHECK
                 int crc = 0xAA ^ len;
                 for (int i = 0; i < len; i++) {
                     crc ^= buffer[i];
@@ -197,26 +182,30 @@ public class BluetoothService extends Service {
 
                 lastRxTime = System.currentTimeMillis();
 
-                // ==================================================
-                // 🔴 DECODE
-                // ==================================================
                 int idx = 0;
 
                 int fault = buffer[idx++] & 0xFF;
                 int sys = buffer[idx++] & 0xFF;
 
                 int v = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
-                int iL = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
-                int iR = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+
+                int m1 = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+                int m2 = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+                int m3 = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+                int m4 = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
+
                 int tL = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
                 int tR = ((buffer[idx++] & 0xFF) << 8) | (buffer[idx++] & 0xFF);
 
                 float volt = v / 100f;
-                float curL = iL / 100f;
-                float curR = iR / 100f;
+
+                float fm1 = m1 / 100f;
+                float fm2 = m2 / 100f;
+                float fm3 = m3 / 100f;
+                float fm4 = m4 / 100f;
 
                 if (telemetryListener != null) {
-                    telemetryListener.onTelemetry(volt, curL, curR, tL, tR);
+                    telemetryListener.onTelemetry(volt, fm1, fm2, fm3, fm4, tL, tR);
                 }
 
             } catch (Exception e) {
@@ -229,7 +218,6 @@ public class BluetoothService extends Service {
         }
     }
 
-    // ==================================================
     private void txLoop() {
 
         while (running.get()) {
@@ -247,7 +235,6 @@ public class BluetoothService extends Service {
         }
     }
 
-    // ==================================================
     private void sendStatus(String status) {
 
         if (status.equals(lastStatus)) return;
@@ -259,14 +246,12 @@ public class BluetoothService extends Service {
         sendBroadcast(intent);
     }
 
-    // ==================================================
     private void safeClose() {
         try { if (input != null) input.close(); } catch (Exception ignored) {}
         try { if (output != null) output.close(); } catch (Exception ignored) {}
         try { if (socket != null) socket.close(); } catch (Exception ignored) {}
     }
 
-    // ==================================================
     @Override
     public void onDestroy() {
         running.set(false);

@@ -10,26 +10,36 @@ import java.util.Locale;
 public class GaugeView extends View {
 
     private float value = 0f;
-    private float maxValue = 100f;
+    private float displayValue = 0f;
+    private float peakValue = 0f;
 
-    private int gaugeColor = Color.GREEN;
-    private boolean useAutoColor = true;
+    private float minValue = 0f;
+    private float maxValue = 100f;
 
     private String unit = "";
 
-    private Paint bgPaint;
-    private Paint fgPaint;
-    private Paint textPaint;
+    private Paint bgPaint, fgPaint, textPaint;
+    private Paint rimPaint, glowPaint, needlePaint, tickPaint, peakPaint, centerPaint;
 
     private RectF rect = new RectF();
 
     private float strokeWidth = 18f;
 
+    private boolean isPreview;
+
+    private boolean flashState = false;
+    private long lastFlashTime = 0;
+
     public GaugeView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
+        isPreview = isInEditMode();
+
+        // =========================
+        // BASE
+        // =========================
         bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        bgPaint.setColor(Color.DKGRAY);
+        bgPaint.setColor(Color.argb(60, 255, 255, 255));
         bgPaint.setStyle(Paint.Style.STROKE);
         bgPaint.setStrokeCap(Paint.Cap.ROUND);
 
@@ -37,70 +47,79 @@ public class GaugeView extends View {
         fgPaint.setStyle(Paint.Style.STROKE);
         fgPaint.setStrokeCap(Paint.Cap.ROUND);
 
+        glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        glowPaint.setStyle(Paint.Style.STROKE);
+        glowPaint.setStrokeCap(Paint.Cap.ROUND);
+
+        rimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        rimPaint.setStyle(Paint.Style.STROKE);
+        rimPaint.setColor(Color.argb(180, 255, 255, 255));
+
+        // =========================
+        // NEEDLE (ปรับใหม่)
+        // =========================
+        needlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        needlePaint.setColor(Color.WHITE);
+        needlePaint.setStrokeWidth(8f); // 🔴 หนาขึ้น
+
+        centerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        centerPaint.setColor(Color.WHITE);
+
+        // =========================
+        // TICK (ปรับให้ชัด)
+        // =========================
+        tickPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        tickPaint.setColor(Color.LTGRAY);
+        tickPaint.setStrokeWidth(3f);
+
+        // =========================
+        // PEAK
+        // =========================
+        peakPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        peakPaint.setColor(Color.CYAN);
+        peakPaint.setStrokeWidth(6f);
+
         textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         textPaint.setColor(Color.WHITE);
         textPaint.setTextAlign(Paint.Align.CENTER);
     }
 
-    // ==================================================
-    // SET VALUE
-    // ==================================================
     public void setValue(float v) {
-
         if (Float.isNaN(v) || Float.isInfinite(v)) return;
 
-        if (v < 0) v = 0;
+        if (v < minValue) v = minValue;
         if (v > maxValue) v = maxValue;
-
-        if (Math.abs(this.value - v) < 0.01f) return;
 
         this.value = v;
 
-        // 🔴 ใช้ postInvalidate กัน thread crash
+        if (v > peakValue) peakValue = v;
+
         postInvalidate();
     }
 
-    public void setMaxValue(float max) {
-        if (max <= 0) return;
-        this.maxValue = max;
-    }
-
-    public void setColor(int color) {
-        this.gaugeColor = color;
-        this.useAutoColor = false;
-        invalidate();
-    }
-
-    public void setAutoColor(boolean enable) {
-        this.useAutoColor = enable;
-        invalidate();
+    public void resetPeak() {
+        peakValue = value;
     }
 
     public void setUnit(String unit) {
         this.unit = unit;
     }
 
-    // ==================================================
-    // SIZE CHANGED (scale UI อัตโนมัติ)
-    // ==================================================
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
 
         int size = Math.min(w, h);
 
-        // 🔴 scale stroke
         strokeWidth = size * 0.08f;
+
         bgPaint.setStrokeWidth(strokeWidth);
         fgPaint.setStrokeWidth(strokeWidth);
+        glowPaint.setStrokeWidth(strokeWidth + 8);
+        rimPaint.setStrokeWidth(strokeWidth * 0.4f);
 
-        // 🔴 scale text
         textPaint.setTextSize(size * 0.22f);
     }
 
-    // ==================================================
-    // DRAW
-    // ==================================================
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
@@ -109,6 +128,16 @@ public class GaugeView extends View {
         int h = getHeight();
 
         if (w == 0 || h == 0) return;
+
+        // =========================
+        // INERTIA
+        // =========================
+        if (isPreview) {
+            displayValue = 50;
+            peakValue = 70f;
+        } else {
+            displayValue += (value - displayValue) * 0.08f;
+        }
 
         int padding = (int)(strokeWidth);
         int size = Math.min(w, h) - padding * 2;
@@ -120,44 +149,101 @@ public class GaugeView extends View {
                 (h + size) / 2f
         );
 
-        float percent = (maxValue == 0) ? 0 : (value / maxValue);
-        percent = Math.max(0f, Math.min(percent, 1f));
+        float percent = (displayValue - minValue) / (maxValue - minValue);
+        float peakPercent = (peakValue - minValue) / (maxValue - minValue);
 
-        // ==================================================
+        percent = Math.max(0f, Math.min(percent, 1f));
+        peakPercent = Math.max(0f, Math.min(peakPercent, 1f));
+
+        // =========================
         // COLOR
-        // ==================================================
-        if (useAutoColor) {
-            if (percent < 0.5f) {
-                fgPaint.setColor(Color.GREEN);
-            } else if (percent < 0.8f) {
-                fgPaint.setColor(Color.YELLOW);
-            } else {
-                fgPaint.setColor(Color.RED);
+        // =========================
+        int color;
+        if (percent < 0.7f) color = Color.GREEN;
+        else if (percent < 0.9f) color = Color.rgb(255,180,0);
+        else color = Color.RED;
+
+        fgPaint.setColor(color);
+        glowPaint.setColor(color);
+        glowPaint.setAlpha(140);
+
+        // FLASH
+        if (percent > 0.9f) {
+            long now = System.currentTimeMillis();
+            if (now - lastFlashTime > 300) {
+                flashState = !flashState;
+                lastFlashTime = now;
             }
-        } else {
-            fgPaint.setColor(gaugeColor);
+            fgPaint.setColor(flashState ? Color.RED : Color.DKGRAY);
         }
 
-        // background
+        // =========================
+        // BASE
+        // =========================
+        canvas.drawArc(rect, 180, 180, false, rimPaint);
         canvas.drawArc(rect, 180, 180, false, bgPaint);
 
-        // foreground
-        canvas.drawArc(rect, 180, percent * 180f, false, fgPaint);
+        // =========================
+        // TICKS (ชัดขึ้น)
+        // =========================
+        for (int i = 0; i <= 10; i++) {
 
-        // ==================================================
-        // TEXT
-        // ==================================================
-        Paint.FontMetrics fm = textPaint.getFontMetrics();
-        float textY = h / 2f - (fm.ascent + fm.descent) / 2;
+            float angle = (float)Math.toRadians(180 + i * 18);
 
-        String text;
+            float len = (i % 5 == 0) ? 40 : 25; // 🔴 major/minor
 
-        if (unit == null || unit.isEmpty()) {
-            text = String.format(Locale.US, "%.0f", value);
-        } else {
-            text = String.format(Locale.US, "%.1f %s", value, unit);
+            float x1 = w/2f + (size/2f - 10) * (float)Math.cos(angle);
+            float y1 = h/2f + (size/2f - 10) * (float)Math.sin(angle);
+
+            float x2 = w/2f + (size/2f - len) * (float)Math.cos(angle);
+            float y2 = h/2f + (size/2f - len) * (float)Math.sin(angle);
+
+            canvas.drawLine(x1, y1, x2, y2, tickPaint);
         }
 
-        canvas.drawText(text, w / 2f, textY, textPaint);
+        // =========================
+        // ARC
+        // =========================
+        canvas.drawArc(rect, 180, percent * 180f, false, glowPaint);
+        canvas.drawArc(rect, 180, percent * 180f, false, fgPaint);
+
+        // =========================
+        // NEEDLE (ปรับใหม่)
+        // =========================
+        float angle = (float)Math.toRadians(180 + percent * 180f);
+
+        float nx = w/2f + (size/2f - 50) * (float)Math.cos(angle);
+        float ny = h/2f + (size/2f - 50) * (float)Math.sin(angle);
+
+        canvas.drawLine(w/2f, h/2f, nx, ny, needlePaint);
+
+        // 🔴 หัวเข็ม
+        canvas.drawCircle(w/2f, h/2f, 10, centerPaint);
+
+        // =========================
+        // PEAK (เด่นขึ้น)
+        // =========================
+        float pAngle = (float)Math.toRadians(180 + peakPercent * 180f);
+
+        float px = w/2f + (size/2f - 30) * (float)Math.cos(pAngle);
+        float py = h/2f + (size/2f - 30) * (float)Math.sin(pAngle);
+
+        canvas.drawCircle(px, py, 8, peakPaint);
+
+        // =========================
+        // TEXT
+        // =========================
+        Paint.FontMetrics fm = textPaint.getFontMetrics();
+        float textY = h/2f - (fm.ascent + fm.descent) / 2;
+
+        String text = (unit == null || unit.isEmpty())
+                ? String.format(Locale.US, "%.0f", displayValue)
+                : String.format(Locale.US, "%.1f %s", displayValue, unit);
+
+        canvas.drawText(text, w/2f, textY, textPaint);
+
+        if (!isPreview) {
+            postInvalidateOnAnimation();
+        }
     }
 }
