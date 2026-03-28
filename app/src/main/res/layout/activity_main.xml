@@ -1,239 +1,221 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#121212"
-    android:padding="8dp">
+    android:background="#121212">
 
     <!-- STATUS -->
     <TextView
         android:id="@+id/txtStatus"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="สถานะ: ไม่ได้เชื่อมต่อ"
-        android:textColor="#FFFFFF"
-        android:textSize="13sp"
-        android:paddingBottom="6dp"/>
+        android:text="@string/status_disconnected"
+        android:textColor="#00E676"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:padding="10dp"
+        android:background="#1E1E1E"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
 
     <!-- VOLT -->
-    <LinearLayout
-        android:layout_width="match_parent"
+    <com.tnmower.tnmower.ui.GaugeView
+        android:id="@+id/gaugeVolt"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="2"
-        android:orientation="vertical"
-        android:background="#1E1E1E"
-        android:padding="6dp"
-        android:gravity="center">
+        android:layout_margin="8dp"
+        app:layout_constraintTop_toBottomOf="@id/txtStatus"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintDimensionRatio="2:1"/>
 
-        <com.tnmower.tnmower.ui.GaugeView
-            android:id="@+id/gaugeVolt"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"/>
+    <TextView
+        android:id="@+id/txtVolt"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/default_voltage"
+        android:textColor="#00FF00"
+        android:textSize="13sp"
+        app:layout_constraintTop_toBottomOf="@id/gaugeVolt"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
 
-        <TextView
-            android:id="@+id/txtVolt"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="แรงดัน = 0.00 V"
-            android:textColor="#00FF00"
-            android:textSize="12sp"/>
-    </LinearLayout>
-
-    <!-- TEMP -->
-    <LinearLayout
-        android:layout_width="match_parent"
+    <!-- TEMP LEFT -->
+    <com.tnmower.tnmower.ui.GaugeView
+        android:id="@+id/gaugeTempL"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="2"
-        android:orientation="horizontal"
-        android:paddingTop="6dp">
+        android:layout_margin="6dp"
+        app:layout_constraintTop_toBottomOf="@id/txtVolt"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/gaugeTempR"
+        app:layout_constraintWidth_percent="0.5"
+        app:layout_constraintDimensionRatio="1:1"/>
 
-        <!-- LEFT -->
-        <LinearLayout
-            android:id="@+id/layoutTempL"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="#1E1E1E"
-            android:padding="6dp"
-            android:orientation="vertical"
-            android:gravity="center">
-
-            <com.tnmower.tnmower.ui.GaugeView
-                android:id="@+id/gaugeTempL"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"/>
-
-            <TextView
-                android:id="@+id/txtTempL"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ซ้าย = 0 °C"
-                android:textColor="#FFA500"
-                android:textSize="11sp"/>
-        </LinearLayout>
-
-        <!-- RIGHT -->
-        <LinearLayout
-            android:id="@+id/layoutTempR"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="#1E1E1E"
-            android:padding="6dp"
-            android:layout_marginStart="4dp"
-            android:orientation="vertical"
-            android:gravity="center">
-
-            <com.tnmower.tnmower.ui.GaugeView
-                android:id="@+id/gaugeTempR"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"/>
-
-            <TextView
-                android:id="@+id/txtTempR"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ขวา = 0 °C"
-                android:textColor="#FFA500"
-                android:textSize="11sp"/>
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- CURRENT + MOTOR -->
-    <LinearLayout
-        android:layout_width="match_parent"
+    <!-- TEMP RIGHT -->
+    <com.tnmower.tnmower.ui.GaugeView
+        android:id="@+id/gaugeTempR"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_weight="4"
-        android:orientation="horizontal"
-        android:paddingTop="6dp">
+        android:layout_margin="6dp"
+        app:layout_constraintTop_toBottomOf="@id/txtVolt"
+        app:layout_constraintStart_toEndOf="@id/gaugeTempL"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintWidth_percent="0.5"
+        app:layout_constraintDimensionRatio="1:1"/>
 
-        <!-- LEFT -->
-        <LinearLayout
-            android:id="@+id/layoutLeft"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="#1E1E1E"
-            android:padding="6dp"
-            android:orientation="vertical">
+    <!-- TEXT TEMP -->
+    <TextView
+        android:id="@+id/txtTempL"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/default_temp_l"
+        android:textColor="#FFA500"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/gaugeTempL"
+        app:layout_constraintStart_toStartOf="@id/gaugeTempL"
+        app:layout_constraintEnd_toEndOf="@id/gaugeTempL"/>
 
-            <com.tnmower.tnmower.ui.GaugeView
-                android:id="@+id/gaugeCurrentL"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"/>
+    <TextView
+        android:id="@+id/txtTempR"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/default_temp_r"
+        android:textColor="#FFA500"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/gaugeTempR"
+        app:layout_constraintStart_toStartOf="@id/gaugeTempR"
+        app:layout_constraintEnd_toEndOf="@id/gaugeTempR"/>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="กระแสซ้าย"
-                android:textColor="#00FFFF"
-                android:textSize="11sp"
-                android:gravity="center"
-                android:paddingTop="4dp"/>
+    <!-- CURRENT LEFT -->
+    <com.tnmower.tnmower.ui.GaugeView
+        android:id="@+id/gaugeCurrentL"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_margin="6dp"
+        app:layout_constraintTop_toBottomOf="@id/txtTempL"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/gaugeCurrentR"
+        app:layout_constraintWidth_percent="0.5"
+        app:layout_constraintDimensionRatio="1:1"/>
 
-            <TextView
-                android:id="@+id/txtM1"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="M1 = 0.00 A"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"/>
+    <!-- CURRENT RIGHT -->
+    <com.tnmower.tnmower.ui.GaugeView
+        android:id="@+id/gaugeCurrentR"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_margin="6dp"
+        app:layout_constraintTop_toBottomOf="@id/txtTempR"
+        app:layout_constraintStart_toEndOf="@id/gaugeCurrentL"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintWidth_percent="0.5"
+        app:layout_constraintDimensionRatio="1:1"/>
 
-            <TextView
-                android:id="@+id/txtM2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="M2 = 0.00 A"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"/>
-        </LinearLayout>
+    <!-- LABEL -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/label_current_left"
+        android:textColor="#00FFFF"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/gaugeCurrentL"
+        app:layout_constraintStart_toStartOf="@id/gaugeCurrentL"
+        app:layout_constraintEnd_toEndOf="@id/gaugeCurrentL"/>
 
-        <!-- RIGHT -->
-        <LinearLayout
-            android:id="@+id/layoutRight"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="#1E1E1E"
-            android:padding="6dp"
-            android:layout_marginStart="4dp"
-            android:orientation="vertical">
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/label_current_right"
+        android:textColor="#00FFFF"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/gaugeCurrentR"
+        app:layout_constraintStart_toStartOf="@id/gaugeCurrentR"
+        app:layout_constraintEnd_toEndOf="@id/gaugeCurrentR"/>
 
-            <com.tnmower.tnmower.ui.GaugeView
-                android:id="@+id/gaugeCurrentR"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"/>
+    <!-- M1 M2 -->
+    <TextView
+        android:id="@+id/txtM1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/default_m1"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/gaugeCurrentL"
+        app:layout_constraintStart_toStartOf="@id/gaugeCurrentL"
+        android:layout_marginTop="20dp"/>
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="กระแสขวา"
-                android:textColor="#00FFFF"
-                android:textSize="11sp"
-                android:gravity="center"
-                android:paddingTop="4dp"/>
+    <TextView
+        android:id="@+id/txtM2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/default_m2"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/txtM1"
+        app:layout_constraintStart_toStartOf="@id/txtM1"/>
 
-            <TextView
-                android:id="@+id/txtM3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="M3 = 0.00 A"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"/>
+    <!-- M3 M4 -->
+    <TextView
+        android:id="@+id/txtM3"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/default_m3"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/gaugeCurrentR"
+        app:layout_constraintStart_toStartOf="@id/gaugeCurrentR"
+        android:layout_marginTop="20dp"/>
 
-            <TextView
-                android:id="@+id/txtM4"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="M4 = 0.00 A"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"/>
-        </LinearLayout>
-    </LinearLayout>
+    <TextView
+        android:id="@+id/txtM4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/default_m4"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        app:layout_constraintTop_toBottomOf="@id/txtM3"
+        app:layout_constraintStart_toStartOf="@id/txtM3"/>
 
-    <!-- CONNECT -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:orientation="horizontal"
-        android:layout_marginTop="6dp">
+    <!-- BUTTON CONNECT -->
+    <Button
+        android:id="@+id/btnConnect"
+        android:layout_width="0dp"
+        android:layout_height="50dp"
+        android:text="@string/btn_connect"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#2E7D32"
+        app:layout_constraintBottom_toTopOf="@id/btnStop"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnDisconnect"
+        android:layout_margin="8dp"/>
 
-        <Button
-            android:id="@+id/btnConnect"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="เชื่อมต่อ"
-            android:textSize="12sp"
-            android:background="#4CAF50"
-            android:textColor="#FFFFFF"/>
+    <!-- DISCONNECT -->
+    <Button
+        android:id="@+id/btnDisconnect"
+        android:layout_width="0dp"
+        android:layout_height="50dp"
+        android:text="@string/btn_disconnect_short"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#C62828"
+        app:layout_constraintBottom_toTopOf="@id/btnStop"
+        app:layout_constraintStart_toEndOf="@id/btnConnect"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_margin="8dp"/>
 
-        <Button
-            android:id="@+id/btnDisconnect"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="ตัด"
-            android:textSize="12sp"
-            android:background="#FF9800"
-            android:textColor="#FFFFFF"/>
-    </LinearLayout>
-
-    <!-- STOP -->
+    <!-- EMERGENCY -->
     <Button
         android:id="@+id/btnStop"
-        android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:text="หยุดฉุกเฉิน"
-        android:textSize="13sp"
-        android:layout_marginTop="4dp"
-        android:background="@android:color/holo_red_dark"
-        android:textColor="#FFFFFF"/>
+        android:layout_width="0dp"
+        android:layout_height="60dp"
+        android:text="@string/btn_emergency"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#FF6F00"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_margin="10dp"/>
 
-</LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

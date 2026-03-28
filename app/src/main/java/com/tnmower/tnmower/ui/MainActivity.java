@@ -53,9 +53,6 @@ public class MainActivity extends AppCompatActivity {
 
     private Vibrator vibrator;
 
-    // ===============================
-    // 🔴 FIX: รับสถานะ + reconnect
-    // ===============================
     private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -72,7 +69,7 @@ public class MainActivity extends AppCompatActivity {
             if ("DISCONNECTED".equals(status)) {
                 connected = false;
                 connecting = false;
-                scheduleReconnect(); // 🔥 reconnect จริง
+                scheduleReconnect();
             }
 
             updateStatusText(status);
@@ -139,7 +136,7 @@ public class MainActivity extends AppCompatActivity {
             connected = false;
             connecting = false;
 
-            txtStatus.setText("สถานะ: ตัดการเชื่อมต่อ");
+            txtStatus.setText(R.string.status_disconnected);
             txtStatus.setTextColor(Color.RED);
 
             updateButtonState();
@@ -147,9 +144,6 @@ public class MainActivity extends AppCompatActivity {
 
         btnStop.setOnClickListener(v -> sendStopCommand());
 
-        // ===============================
-        // 🔴 TELEMETRY
-        // ===============================
         BluetoothService.setTelemetryListener((volt, m1, m2, m3, m4, tL, tR) -> {
 
             this.m1 = m1;
@@ -168,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
 
             runOnUiThread(() -> {
                 updateTempText();
-                updateMotorText(); // 🔥 logic ใหม่อยู่ตรงนี้
+                updateMotorText();
                 checkDanger();
             });
         });
@@ -180,9 +174,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ===============================
-    // 🔴 CONNECT + TIMEOUT
-    // ===============================
     private void startBluetooth(String mac) {
 
         if (connecting) return;
@@ -190,7 +181,7 @@ public class MainActivity extends AppCompatActivity {
         connecting = true;
         connected = false;
 
-        txtStatus.setText("กำลังเชื่อมต่อ...");
+        txtStatus.setText(R.string.status_connecting);
         txtStatus.setTextColor(Color.YELLOW);
 
         updateButtonState();
@@ -203,18 +194,15 @@ public class MainActivity extends AppCompatActivity {
             if (!connected) {
                 connecting = false;
 
-                txtStatus.setText("เชื่อมต่อไม่สำเร็จ");
+                txtStatus.setText(R.string.status_failed);
                 txtStatus.setTextColor(Color.RED);
 
-                scheduleReconnect(); // 🔥 สำคัญ
+                scheduleReconnect();
                 updateButtonState();
             }
         }, CONNECT_TIMEOUT);
     }
 
-    // ===============================
-    // 🔴 RECONNECT
-    // ===============================
     private void scheduleReconnect() {
 
         if (reconnectAttempts >= MAX_RECONNECT) return;
@@ -237,9 +225,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ===============================
-    // 🔴 SMOOTH LOOP
-    // ===============================
     private void startSmoothLoop() {
 
         if (isLoopRunning) return;
@@ -274,27 +259,24 @@ public class MainActivity extends AppCompatActivity {
         gaugeTempL.setValue(displayTempL);
         gaugeTempR.setValue(displayTempR);
 
-        txtVolt.setText(String.format("แรงดัน = %.2f V", displayVolt));
+        txtVolt.setText(getString(R.string.display_voltage, displayVolt));
     }
 
     private void updateTempText() {
 
-        txtTempL.setText(String.format("ซ้าย = %.0f °C", tempL));
-        txtTempR.setText(String.format("ขวา = %.0f °C", tempR));
+        txtTempL.setText(getString(R.string.display_temp_l, tempL));
+        txtTempR.setText(getString(R.string.display_temp_r, tempR));
 
         txtTempL.setTextColor(tempL > 80 ? Color.RED : Color.WHITE);
         txtTempR.setTextColor(tempR > 80 ? Color.RED : Color.WHITE);
     }
 
-    // ===============================
-    // 🔴 MOTOR + ALERT + HIGHLIGHT
-    // ===============================
     private void updateMotorText() {
 
-        txtM1.setText(String.format("M1 = %.2f A", m1));
-        txtM2.setText(String.format("M2 = %.2f A", m2));
-        txtM3.setText(String.format("M3 = %.2f A", m3));
-        txtM4.setText(String.format("M4 = %.2f A", m4));
+        txtM1.setText(getString(R.string.display_m1, m1));
+        txtM2.setText(getString(R.string.display_m2, m2));
+        txtM3.setText(getString(R.string.display_m3, m3));
+        txtM4.setText(getString(R.string.display_m4, m4));
 
         float limit = 30f;
 
@@ -308,14 +290,12 @@ public class MainActivity extends AppCompatActivity {
         txtM3.setTextColor(m3Over ? Color.RED : Color.WHITE);
         txtM4.setTextColor(m4Over ? Color.RED : Color.WHITE);
 
-        // 🔴 highlight ฝั่งด้วยค่า (ไม่ใช่ setColor)
         float leftSum = m1 + m2;
         float rightSum = m3 + m4;
 
         gaugeCurrentL.setValue(leftSum);
         gaugeCurrentR.setValue(rightSum);
 
-        // 🔴 แจ้งเตือน
         if (m1Over || m2Over || m3Over || m4Over) {
             vibrateAlert();
         }
@@ -355,7 +335,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateStatusText(String status) {
-        txtStatus.setText("สถานะ: " + status);
+        txtStatus.setText(getString(R.string.status_prefix, status));
         txtStatus.setTextColor(status.contains("CONNECTED") ? Color.GREEN : Color.RED);
     }
 
@@ -387,4 +367,3 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
-
