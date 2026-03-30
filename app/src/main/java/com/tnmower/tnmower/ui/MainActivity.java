@@ -1,10 +1,22 @@
 package com.tnmower.tnmower.ui;
 
-import android.content.*;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.os.*;
-import android.widget.*;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.widget.Button;
+import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -19,75 +31,32 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final int RECONNECT_DELAY = 3000;
+    private static final int CONNECT_TIMEOUT = 5000;
+    private static final int MAX_RECONNECT = 5;
+    private static final long UI_INTERVAL = 100;
+    private final Handler reconnectHandler = new Handler(Looper.getMainLooper());
     private TextView txtVolt, txtStatus;
     private TextView txtTempL, txtTempR;
     private TextView txtM1, txtM2, txtM3, txtM4;
-
     private Button btnConnect, btnDisconnect, btnStop;
-
     private String selectedMAC = "";
-
     private boolean connected = false;
     private boolean connecting = false;
-
-    private final Handler reconnectHandler = new Handler(Looper.getMainLooper());
     private Runnable reconnectRunnable;
-
-    private static final int RECONNECT_DELAY = 3000;
-    private static final int CONNECT_TIMEOUT = 5000;
-
     private int reconnectAttempts = 0;
-    private static final int MAX_RECONNECT = 5;
-
-    private boolean isReceiverRegistered = false;
-
-    private Vibrator vibrator;
-
-    // =========================
-    // 🔴 SMOOTH DATA
-    // =========================
-    private TelemetryData smoothData = null;
-    private long lastUiUpdate = 0;
-    private static final long UI_INTERVAL = 100;
-
-    // =========================
-    // 🔴 SERVICE
-    // =========================
-    private BluetoothService btService = null;
-    private boolean isBound = false;
-
     // =========================
     // 🔴 Activity Result (แทนของเก่า)
     // =========================
-    private final ActivityResultLauncher<Intent> deviceLauncher =
-            registerForActivityResult(
-                    new ActivityResultContracts.StartActivityForResult(),
-                    result -> {
-                        if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-                            String mac = result.getData().getStringExtra("MAC");
-                            if (mac != null) {
-                                selectedMAC = mac;
-                                startBluetooth(mac);
-                            }
-                        }
-                    });
-
-    private final ServiceConnection serviceConnection = new ServiceConnection() {
-
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            BluetoothService.LocalBinder binder = (BluetoothService.LocalBinder) service;
-            btService = binder.getService();
-            isBound = true;
+    private final ActivityResultLauncher<Intent> deviceLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+        if (result.getResultCode() == RESULT_OK && result.getData() != null) {
+            String mac = result.getData().getStringExtra("MAC");
+            if (mac != null) {
+                selectedMAC = mac;
+                startBluetooth(mac);
+            }
         }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            isBound = false;
-            btService = null;
-        }
-    };
-
+    });
     private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -109,6 +78,33 @@ public class MainActivity extends AppCompatActivity {
 
             updateStatusText(status);
             updateButtonState();
+        }
+    };
+    private boolean isReceiverRegistered = false;
+    private Vibrator vibrator;
+    // =========================
+    // 🔴 SMOOTH DATA
+    // =========================
+    private TelemetryData smoothData = null;
+    private long lastUiUpdate = 0;
+    // =========================
+    // 🔴 SERVICE
+    // =========================
+    private BluetoothService btService = null;
+    private boolean isBound = false;
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            BluetoothService.LocalBinder binder = (BluetoothService.LocalBinder) service;
+            btService = binder.getService();
+            isBound = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            isBound = false;
+            btService = null;
         }
     };
 
@@ -169,9 +165,7 @@ public class MainActivity extends AppCompatActivity {
 
         BluetoothService.setTelemetryListener((volt, m1, m2, m3, m4, tL, tR) -> {
 
-            TelemetryData raw = new TelemetryData(
-                    volt, m1, m2, m3, m4, tL, tR
-            );
+            TelemetryData raw = new TelemetryData(volt, m1, m2, m3, m4, tL, tR);
 
             updateUI(raw);
         });
@@ -210,16 +204,21 @@ public class MainActivity extends AppCompatActivity {
             smoothData = raw;
         }
 
-        float alpha = 0.2f;
+        // 🔴 แยก alpha ตามประเภทข้อมูล (เนียนขึ้น)
+        float alphaVolt = 0.1f;     // แรงดัน → นิ่ง
+        float alphaTemp = 0.15f;    // อุณหภูมิ → ปานกลาง
+        float alphaCurrent = 0.3f;  // กระแส → ตอบสนองไว
 
-        smoothData.volt = smooth(raw.volt, smoothData.volt, alpha);
-        smoothData.tempL = smooth(raw.tempL, smoothData.tempL, alpha);
-        smoothData.tempR = smooth(raw.tempR, smoothData.tempR, alpha);
+// 🔴 apply smoothing
+        smoothData.volt = smooth(raw.volt, smoothData.volt, alphaVolt);
 
-        smoothData.m1 = smooth(raw.m1, smoothData.m1, alpha);
-        smoothData.m2 = smooth(raw.m2, smoothData.m2, alpha);
-        smoothData.m3 = smooth(raw.m3, smoothData.m3, alpha);
-        smoothData.m4 = smooth(raw.m4, smoothData.m4, alpha);
+        smoothData.tempL = smooth(raw.tempL, smoothData.tempL, alphaTemp);
+        smoothData.tempR = smooth(raw.tempR, smoothData.tempR, alphaTemp);
+
+        smoothData.m1 = smooth(raw.m1, smoothData.m1, alphaCurrent);
+        smoothData.m2 = smooth(raw.m2, smoothData.m2, alphaCurrent);
+        smoothData.m3 = smooth(raw.m3, smoothData.m3, alphaCurrent);
+        smoothData.m4 = smooth(raw.m4, smoothData.m4, alphaCurrent);
 
         lastUiUpdate = now;
 
@@ -345,12 +344,7 @@ public class MainActivity extends AppCompatActivity {
         if (!isReceiverRegistered) {
             IntentFilter filter = new IntentFilter("TNMOWER_STATUS");
 
-            ContextCompat.registerReceiver(
-                    this,
-                    statusReceiver,
-                    filter,
-                    ContextCompat.RECEIVER_NOT_EXPORTED
-            );
+            ContextCompat.registerReceiver(this, statusReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
 
             isReceiverRegistered = true;
         }

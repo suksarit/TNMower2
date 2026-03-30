@@ -40,7 +40,7 @@ public class BluetoothService extends Service {
     private static final long RX_TIMEOUT = 3000;
 
     // =========================
-    // 🔴 BINDER (เพิ่ม)
+    // 🔴 BINDER
     // =========================
     public class LocalBinder extends Binder {
         public BluetoothService getService() {
@@ -133,6 +133,10 @@ public class BluetoothService extends Service {
             if (connected.get() && (now - lastRxTime > RX_TIMEOUT)) {
                 sendStatus("TIMEOUT");
                 connected.set(false);
+                waitingAck = -1;
+                retryCount = 0;
+                commandQueue.clear();
+
                 safeClose();
             }
 
@@ -250,34 +254,41 @@ public class BluetoothService extends Service {
                 int idx = 0;
 
                 int type = buffer[idx++] & 0xFF;
-                int seq  = buffer[idx++] & 0xFF;
+                int seq = buffer[idx++] & 0xFF;
 
-                // 🔴 กัน packet ซ้ำ (สำคัญมาก)
-                if (seq == lastSeq) {
+// 🔴 กัน packet ซ้ำ (เฉพาะ telemetry เท่านั้น)
+                if (type == 0x01 && seq == lastSeq) {
                     continue;
                 }
                 lastSeq = seq;
 
-                // 🔴 TELEMETRY
+// ==================================================
+// 🔴 1. TELEMETRY (ต้องมาก่อน)
+// ==================================================
                 if (type == 0x01) {
 
                     idx += 2; // skip fault + state
 
-                    float volt = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+                    float volt = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
 
-                    float m1 = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
-                    float m2 = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
-                    float m3 = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
-                    float m4 = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+                    float m1 = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+                    float m2 = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+                    float m3 = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+                    float m4 = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
 
-                    float tempL = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
-                    float tempR = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
+                    float tempL = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
+                    float tempR = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
 
                     if (telemetryListener != null) {
                         telemetryListener.onTelemetry(volt, m1, m2, m3, m4, tempL, tempR);
                     }
+
+                    continue; // 🔴 สำคัญมาก: จบ packet นี้เลย
                 }
 
+// ==================================================
+// 🔴 2. ACK
+// ==================================================
                 if (type == 0x03) {
 
                     if (seq == waitingAck) {
@@ -285,8 +296,9 @@ public class BluetoothService extends Service {
                         retryCount = 0;
                         processQueue();
                     }
-                }
 
+                    continue;
+                }
             } catch (Exception e) {
 
                 connected.set(false);
@@ -334,19 +346,19 @@ public class BluetoothService extends Service {
             byte[] packet = new byte[16];
             int idx = 0;
 
-            packet[idx++] = (byte)0xAA;
+            packet[idx++] = (byte) 0xAA;
             int lenIndex = idx++;
 
             packet[idx++] = 0x02;
-            packet[idx++] = (byte)txSeq;
+            packet[idx++] = (byte) txSeq;
             packet[idx++] = cmd;
 
-            packet[lenIndex] = (byte)(idx - 2);
+            packet[lenIndex] = (byte) (idx - 2);
 
             int crc = CRCUtil.crc16(packet, idx) & 0xFFFF;
 
-            packet[idx++] = (byte)(crc & 0xFF);         // LOW BYTE
-            packet[idx++] = (byte)((crc >> 8) & 0xFF);  // HIGH BYTE
+            packet[idx++] = (byte) (crc & 0xFF);         // LOW BYTE
+            packet[idx++] = (byte) ((crc >> 8) & 0xFF);  // HIGH BYTE
 
             output.write(packet, 0, idx);
             output.flush();
@@ -360,7 +372,8 @@ public class BluetoothService extends Service {
 
             lastCmdTime = System.currentTimeMillis();
 
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     private void sendStatus(String status) {
@@ -375,9 +388,18 @@ public class BluetoothService extends Service {
     }
 
     private void safeClose() {
-        try { if (input != null) input.close(); } catch (Exception ignored) {}
-        try { if (output != null) output.close(); } catch (Exception ignored) {}
-        try { if (socket != null) socket.close(); } catch (Exception ignored) {}
+        try {
+            if (input != null) input.close();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (output != null) output.close();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (socket != null) socket.close();
+        } catch (Exception ignored) {
+        }
     }
 
     @Override

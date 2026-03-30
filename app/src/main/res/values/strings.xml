@@ -25,8 +25,8 @@
     <!-- LABEL -->
     <!-- ========================= -->
     <string name="label_voltage">แรงดัน</string>
-    <string name="label_temp">อุณหภูมิ (ซ้าย-ขวา)</string>
-    <string name="label_current">กระแส (M1-M4)</string>
+    <string name="label_temp">อุณหภูมิ </string>
+    <string name="label_current">กระแส </string>
     <string name="label_select_device">เลือกอุปกรณ์ Bluetooth</string>
 
     <!-- ========================= -->
