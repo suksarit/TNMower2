@@ -15,6 +15,8 @@ import java.util.UUID;
 import java.util.LinkedList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.tnmower.tnmower.utils.CRCUtil;
+
 public class BluetoothService extends Service {
 
     private static final String CHANNEL_ID = "TN_MOWER_BT";
@@ -234,11 +236,11 @@ public class BluetoothService extends Service {
                 int crcRx = (crcHigh << 8) | crcLow;
 
                 int crc = 0xFFFF;
-                crc = crc16Update(crc, 0xAA);
-                crc = crc16Update(crc, len);
+                crc = CRCUtil.crc16Update(crc, 0xAA);
+                crc = CRCUtil.crc16Update(crc, len);
 
                 for (int i = 0; i < len; i++) {
-                    crc = crc16Update(crc, buffer[i] & 0xFF);
+                    crc = CRCUtil.crc16Update(crc, buffer[i] & 0xFF);
                 }
 
                 if ((crc & 0xFFFF) != crcRx) continue;
@@ -249,6 +251,32 @@ public class BluetoothService extends Service {
 
                 int type = buffer[idx++] & 0xFF;
                 int seq  = buffer[idx++] & 0xFF;
+
+                // 🔴 กัน packet ซ้ำ (สำคัญมาก)
+                if (seq == lastSeq) {
+                    continue;
+                }
+                lastSeq = seq;
+
+                // 🔴 TELEMETRY
+                if (type == 0x01) {
+
+                    idx += 2; // skip fault + state
+
+                    float volt = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+
+                    float m1 = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+                    float m2 = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+                    float m3 = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+                    float m4 = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF))) / 100f;
+
+                    float tempL = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
+                    float tempR = ((short)((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
+
+                    if (telemetryListener != null) {
+                        telemetryListener.onTelemetry(volt, m1, m2, m3, m4, tempL, tempR);
+                    }
+                }
 
                 if (type == 0x03) {
 
@@ -315,10 +343,10 @@ public class BluetoothService extends Service {
 
             packet[lenIndex] = (byte)(idx - 2);
 
-            int crc = crc16(packet, idx);
+            int crc = CRCUtil.crc16(packet, idx) & 0xFFFF;
 
-            packet[idx++] = (byte)(crc & 0xFF);
-            packet[idx++] = (byte)((crc >> 8) & 0xFF);
+            packet[idx++] = (byte)(crc & 0xFF);         // LOW BYTE
+            packet[idx++] = (byte)((crc >> 8) & 0xFF);  // HIGH BYTE
 
             output.write(packet, 0, idx);
             output.flush();
@@ -333,29 +361,6 @@ public class BluetoothService extends Service {
             lastCmdTime = System.currentTimeMillis();
 
         } catch (Exception ignored) {}
-    }
-
-    private int crc16Update(int crc, int data) {
-
-        crc ^= data;
-
-        for (int i = 0; i < 8; i++) {
-            if ((crc & 1) != 0) crc = (crc >> 1) ^ 0xA001;
-            else crc >>= 1;
-        }
-
-        return crc;
-    }
-
-    private int crc16(byte[] data, int len) {
-
-        int crc = 0xFFFF;
-
-        for (int i = 0; i < len; i++) {
-            crc = crc16Update(crc, data[i] & 0xFF);
-        }
-
-        return crc;
     }
 
     private void sendStatus(String status) {
