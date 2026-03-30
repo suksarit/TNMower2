@@ -11,10 +11,9 @@ import androidx.core.content.ContextCompat;
 
 import com.tnmower.tnmower.R;
 import com.tnmower.tnmower.bluetooth.BluetoothService;
+import com.tnmower.tnmower.model.TelemetryData;
 
 public class MainActivity extends AppCompatActivity {
-
-    private GaugeView gaugeVolt, gaugeCurrentL, gaugeCurrentR, gaugeTempL, gaugeTempR;
 
     private TextView txtVolt, txtStatus;
     private TextView txtTempL, txtTempR;
@@ -37,22 +36,38 @@ public class MainActivity extends AppCompatActivity {
     private int reconnectAttempts = 0;
     private static final int MAX_RECONNECT = 5;
 
-    private float targetVolt = 0, displayVolt = 0;
-    private float targetCurrentL = 0, targetCurrentR = 0;
-    private float displayCurrentL = 0, displayCurrentR = 0;
-    private float targetTempL = 0, targetTempR = 0;
-    private float displayTempL = 0, displayTempR = 0;
-
-    private float tempL = 0, tempR = 0;
-    private float m1 = 0, m2 = 0, m3 = 0, m4 = 0;
-
-    private final Handler handler = new Handler();
-    private boolean isLoopRunning = false;
-
     private boolean isReceiverRegistered = false;
 
     private Vibrator vibrator;
 
+    // 🔴 NEW (ลด lag)
+    private TelemetryData lastData = null;
+    private long lastUiUpdate = 0;
+    private static final long UI_INTERVAL = 100;
+
+    // 🔴 NEW (bind service)
+    private BluetoothService btService = null;
+    private boolean isBound = false;
+
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            BluetoothService.LocalBinder binder = (BluetoothService.LocalBinder) service;
+            btService = binder.getService();
+            isBound = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            isBound = false;
+            btService = null;
+        }
+    };
+
+    // =========================
+    // RECEIVER
+    // =========================
     private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -77,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    // =========================
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -86,18 +102,6 @@ public class MainActivity extends AppCompatActivity {
 
         SharedPreferences sp = getSharedPreferences("TN_MOWER", MODE_PRIVATE);
         selectedMAC = sp.getString("MAC", "");
-
-        gaugeVolt = findViewById(R.id.gaugeVolt);
-        gaugeCurrentL = findViewById(R.id.gaugeCurrentL);
-        gaugeCurrentR = findViewById(R.id.gaugeCurrentR);
-        gaugeTempL = findViewById(R.id.gaugeTempL);
-        gaugeTempR = findViewById(R.id.gaugeTempR);
-
-        gaugeVolt.setUnit("V");
-        gaugeCurrentL.setUnit("A");
-        gaugeCurrentR.setUnit("A");
-        gaugeTempL.setUnit("°C");
-        gaugeTempR.setUnit("°C");
 
         txtVolt = findViewById(R.id.txtVolt);
         txtStatus = findViewById(R.id.txtStatus);
@@ -144,33 +148,106 @@ public class MainActivity extends AppCompatActivity {
 
         btnStop.setOnClickListener(v -> sendStopCommand());
 
+        // 🔴 TELEMETRY
         BluetoothService.setTelemetryListener((volt, m1, m2, m3, m4, tL, tR) -> {
 
-            this.m1 = m1;
-            this.m2 = m2;
-            this.m3 = m3;
-            this.m4 = m4;
+            TelemetryData data = new TelemetryData(
+                    volt, m1, m2, m3, m4, tL, tR
+            );
 
-            tempL = tL;
-            tempR = tR;
-
-            targetVolt = clamp(volt, 0, 30);
-            targetCurrentL = clamp(m1 + m2, 0, 100);
-            targetCurrentR = clamp(m3 + m4, 0, 100);
-            targetTempL = clamp(tL, 0, 120);
-            targetTempR = clamp(tR, 0, 120);
-
-            runOnUiThread(() -> {
-                updateTempText();
-                updateMotorText();
-                checkDanger();
-            });
+            updateUI(data);
         });
-
-        startSmoothLoop();
 
         if (!selectedMAC.isEmpty()) {
             startBluetooth(selectedMAC);
+        }
+    }
+
+    // =========================
+    // 🔴 BIND SERVICE
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        Intent intent = new Intent(this, BluetoothService.class);
+        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+
+        if (isBound) {
+            unbindService(serviceConnection);
+            isBound = false;
+        }
+    }
+
+    // =========================
+    private void updateUI(TelemetryData data) {
+
+        long now = System.currentTimeMillis();
+
+        if (now - lastUiUpdate < UI_INTERVAL) return;
+        if (!data.isValid()) return;
+
+        if (lastData != null) {
+            if (Math.abs(lastData.volt - data.volt) < 0.1f &&
+                    Math.abs(lastData.getAverageCurrent() - data.getAverageCurrent()) < 0.1f &&
+                    Math.abs(lastData.getMaxTemp() - data.getMaxTemp()) < 1f) {
+                return;
+            }
+        }
+
+        lastData = data;
+        lastUiUpdate = now;
+
+        runOnUiThread(() -> {
+
+            txtVolt.setText(String.format("%.1f V", data.volt));
+
+            txtTempL.setText(String.format("L: %.1f °C", data.tempL));
+            txtTempR.setText(String.format("R: %.1f °C", data.tempR));
+
+            txtM1.setText(String.format("M1: %.1f A", data.m1));
+            txtM2.setText(String.format("M2: %.1f A", data.m2));
+            txtM3.setText(String.format("M3: %.1f A", data.m3));
+            txtM4.setText(String.format("M4: %.1f A", data.m4));
+
+            setColorSmart(txtVolt, data.volt, 20, 24);
+
+            setColorSmart(txtTempL, data.tempL, 60, 80);
+            setColorSmart(txtTempR, data.tempR, 60, 80);
+
+            setColorSmart(txtM1, data.m1, 20, 30);
+            setColorSmart(txtM2, data.m2, 20, 30);
+            setColorSmart(txtM3, data.m3, 20, 30);
+            setColorSmart(txtM4, data.m4, 20, 30);
+
+            if (data.hasError()) {
+                vibrateAlert();
+            }
+        });
+    }
+
+    private void setColorSmart(TextView tv, float value, float warn, float danger) {
+
+        if (value >= danger) {
+            tv.setTextColor(Color.RED);
+        } else if (value >= warn) {
+            tv.setTextColor(0xFFFFA500);
+        } else {
+            tv.setTextColor(Color.WHITE);
+        }
+    }
+
+    private void vibrateAlert() {
+        if (vibrator == null) return;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE));
+        } else {
+            vibrator.vibrate(200);
         }
     }
 
@@ -225,108 +302,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void startSmoothLoop() {
-
-        if (isLoopRunning) return;
-        isLoopRunning = true;
-
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-
-                if (!isLoopRunning) return;
-
-                float alpha = 0.1f;
-
-                displayVolt += (targetVolt - displayVolt) * alpha;
-                displayCurrentL += (targetCurrentL - displayCurrentL) * alpha;
-                displayCurrentR += (targetCurrentR - displayCurrentR) * alpha;
-                displayTempL += (targetTempL - displayTempL) * alpha;
-                displayTempR += (targetTempR - displayTempR) * alpha;
-
-                updateGauge();
-
-                handler.postDelayed(this, 16);
-            }
-        }, 100);
-    }
-
-    private void updateGauge() {
-
-        gaugeVolt.setValue(displayVolt);
-        gaugeCurrentL.setValue(displayCurrentL);
-        gaugeCurrentR.setValue(displayCurrentR);
-        gaugeTempL.setValue(displayTempL);
-        gaugeTempR.setValue(displayTempR);
-
-        txtVolt.setText(getString(R.string.display_voltage, displayVolt));
-    }
-
-    private void updateTempText() {
-
-        txtTempL.setText(getString(R.string.display_temp_l, tempL));
-        txtTempR.setText(getString(R.string.display_temp_r, tempR));
-
-        txtTempL.setTextColor(tempL > 80 ? Color.RED : Color.WHITE);
-        txtTempR.setTextColor(tempR > 80 ? Color.RED : Color.WHITE);
-    }
-
-    private void updateMotorText() {
-
-        txtM1.setText(getString(R.string.display_m1, m1));
-        txtM2.setText(getString(R.string.display_m2, m2));
-        txtM3.setText(getString(R.string.display_m3, m3));
-        txtM4.setText(getString(R.string.display_m4, m4));
-
-        float limit = 30f;
-
-        boolean m1Over = m1 > limit;
-        boolean m2Over = m2 > limit;
-        boolean m3Over = m3 > limit;
-        boolean m4Over = m4 > limit;
-
-        txtM1.setTextColor(m1Over ? Color.RED : Color.WHITE);
-        txtM2.setTextColor(m2Over ? Color.RED : Color.WHITE);
-        txtM3.setTextColor(m3Over ? Color.RED : Color.WHITE);
-        txtM4.setTextColor(m4Over ? Color.RED : Color.WHITE);
-
-        float leftSum = m1 + m2;
-        float rightSum = m3 + m4;
-
-        gaugeCurrentL.setValue(leftSum);
-        gaugeCurrentR.setValue(rightSum);
-
-        if (m1Over || m2Over || m3Over || m4Over) {
-            vibrateAlert();
-        }
-    }
-
-    private void vibrateAlert() {
-        if (vibrator == null) return;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE));
-        } else {
-            vibrator.vibrate(200);
-        }
-    }
-
-    private void checkDanger() {
-        if ((tempL > 80 || tempR > 80)) {
-            vibrateAlert();
-        }
-    }
-
+    // 🔴 STOP ถูกต้องระดับระบบ
     private void sendStopCommand() {
-        try {
-            Intent intent = new Intent(this, BluetoothService.class);
-            intent.putExtra("cmd", "STOP");
-            startService(intent);
-        } catch (Exception ignored) {}
-    }
 
-    private float clamp(float v, float min, float max) {
-        return Math.max(min, Math.min(max, v));
+        if (btService != null && isBound) {
+            btService.sendStop();
+        }
     }
 
     private void updateButtonState() {

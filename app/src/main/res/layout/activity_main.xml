@@ -6,12 +6,14 @@
     android:layout_height="match_parent"
     android:background="#121212">
 
+    <!-- ========================= -->
     <!-- STATUS -->
+    <!-- ========================= -->
     <TextView
         android:id="@+id/txtStatus"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/status_disconnected"
+        android:text="DISCONNECTED"
         android:textColor="#00E676"
         android:textSize="20sp"
         android:textStyle="bold"
@@ -21,170 +23,149 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- VOLT -->
-    <com.tnmower.tnmower.ui.GaugeView
-        android:id="@+id/gaugeVolt"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="8dp"
+    <!-- ========================= -->
+    <!-- 🔴 แรงดัน -->
+    <!-- ========================= -->
+    <TextView
+        android:id="@+id/labelVolt"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="แรงดัน"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
         app:layout_constraintTop_toBottomOf="@id/txtStatus"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintDimensionRatio="2:1"/>
+        android:layout_margin="16dp"/>
 
     <TextView
         android:id="@+id/txtVolt"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/default_voltage"
-        android:textColor="#00FF00"
-        android:textSize="13sp"
-        app:layout_constraintTop_toBottomOf="@id/gaugeVolt"
+        android:text="0.0 V"
+        android:textColor="#FFFFFF"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toBottomOf="@id/labelVolt"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        android:layout_marginStart="16dp"/>
 
-    <!-- TEMP LEFT -->
-    <com.tnmower.tnmower.ui.GaugeView
-        android:id="@+id/gaugeTempL"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="6dp"
-        app:layout_constraintTop_toBottomOf="@id/txtVolt"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/gaugeTempR"
-        app:layout_constraintWidth_percent="0.5"
-        app:layout_constraintDimensionRatio="1:1"/>
-
-    <!-- TEMP RIGHT -->
-    <com.tnmower.tnmower.ui.GaugeView
-        android:id="@+id/gaugeTempR"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="6dp"
-        app:layout_constraintTop_toBottomOf="@id/txtVolt"
-        app:layout_constraintStart_toEndOf="@id/gaugeTempL"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintWidth_percent="0.5"
-        app:layout_constraintDimensionRatio="1:1"/>
-
-    <!-- TEXT TEMP -->
+    <!-- ========================= -->
+    <!-- 🔴 อุณหภูมิ -->
+    <!-- ========================= -->
     <TextView
-        android:id="@+id/txtTempL"
+        android:id="@+id/labelTemp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/default_temp_l"
-        android:textColor="#FFA500"
-        android:textSize="12sp"
-        app:layout_constraintTop_toBottomOf="@id/gaugeTempL"
-        app:layout_constraintStart_toStartOf="@id/gaugeTempL"
-        app:layout_constraintEnd_toEndOf="@id/gaugeTempL"/>
+        android:text="อุณหภูมิ (ซ้าย - ขวา)"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:layout_constraintTop_toBottomOf="@id/txtVolt"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_margin="16dp"/>
+
+    <TextView
+        android:id="@+id/txtTempL"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="L: 0.0 °C"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        app:layout_constraintTop_toBottomOf="@id/labelTemp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/txtTempR"
+        app:layout_constraintWidth_percent="0.5"
+        android:layout_marginStart="16dp"/>
 
     <TextView
         android:id="@+id/txtTempR"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="R: 0.0 °C"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        app:layout_constraintTop_toBottomOf="@id/labelTemp"
+        app:layout_constraintStart_toEndOf="@id/txtTempL"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintWidth_percent="0.5"/>
+
+    <!-- ========================= -->
+    <!-- 🔴 กระแส -->
+    <!-- ========================= -->
+    <TextView
+        android:id="@+id/labelCurrent"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/default_temp_r"
-        android:textColor="#FFA500"
-        android:textSize="12sp"
-        app:layout_constraintTop_toBottomOf="@id/gaugeTempR"
-        app:layout_constraintStart_toStartOf="@id/gaugeTempR"
-        app:layout_constraintEnd_toEndOf="@id/gaugeTempR"/>
-
-    <!-- CURRENT LEFT -->
-    <com.tnmower.tnmower.ui.GaugeView
-        android:id="@+id/gaugeCurrentL"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="6dp"
+        android:text="กระแส (M1 - M4)"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold"
         app:layout_constraintTop_toBottomOf="@id/txtTempL"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/gaugeCurrentR"
-        app:layout_constraintWidth_percent="0.5"
-        app:layout_constraintDimensionRatio="1:1"/>
+        android:layout_margin="16dp"/>
 
-    <!-- CURRENT RIGHT -->
-    <com.tnmower.tnmower.ui.GaugeView
-        android:id="@+id/gaugeCurrentR"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_margin="6dp"
-        app:layout_constraintTop_toBottomOf="@id/txtTempR"
-        app:layout_constraintStart_toEndOf="@id/gaugeCurrentL"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintWidth_percent="0.5"
-        app:layout_constraintDimensionRatio="1:1"/>
-
-    <!-- LABEL -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/label_current_left"
-        android:textColor="#00FFFF"
-        android:textSize="12sp"
-        app:layout_constraintTop_toBottomOf="@id/gaugeCurrentL"
-        app:layout_constraintStart_toStartOf="@id/gaugeCurrentL"
-        app:layout_constraintEnd_toEndOf="@id/gaugeCurrentL"/>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/label_current_right"
-        android:textColor="#00FFFF"
-        android:textSize="12sp"
-        app:layout_constraintTop_toBottomOf="@id/gaugeCurrentR"
-        app:layout_constraintStart_toStartOf="@id/gaugeCurrentR"
-        app:layout_constraintEnd_toEndOf="@id/gaugeCurrentR"/>
-
-    <!-- M1 M2 -->
+    <!-- ROW 1 -->
     <TextView
         android:id="@+id/txtM1"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/default_m1"
+        android:text="M1: 0.0 A"
         android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        app:layout_constraintTop_toBottomOf="@id/gaugeCurrentL"
-        app:layout_constraintStart_toStartOf="@id/gaugeCurrentL"
-        android:layout_marginTop="20dp"/>
+        android:textSize="20sp"
+        app:layout_constraintTop_toBottomOf="@id/labelCurrent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/txtM2"
+        app:layout_constraintWidth_percent="0.5"
+        android:layout_marginStart="16dp"/>
 
     <TextView
         android:id="@+id/txtM2"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/default_m2"
+        android:text="M2: 0.0 A"
         android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        app:layout_constraintTop_toBottomOf="@id/txtM1"
-        app:layout_constraintStart_toStartOf="@id/txtM1"/>
+        android:textSize="20sp"
+        app:layout_constraintTop_toBottomOf="@id/labelCurrent"
+        app:layout_constraintStart_toEndOf="@id/txtM1"
+        app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- M3 M4 -->
+    <!-- ROW 2 -->
     <TextView
         android:id="@+id/txtM3"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/default_m3"
+        android:text="M3: 0.0 A"
         android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        app:layout_constraintTop_toBottomOf="@id/gaugeCurrentR"
-        app:layout_constraintStart_toStartOf="@id/gaugeCurrentR"
-        android:layout_marginTop="20dp"/>
+        android:textSize="20sp"
+        app:layout_constraintTop_toBottomOf="@id/txtM1"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/txtM4"
+        app:layout_constraintWidth_percent="0.5"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="10dp"/>
 
     <TextView
         android:id="@+id/txtM4"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="@string/default_m4"
+        android:text="M4: 0.0 A"
         android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        app:layout_constraintTop_toBottomOf="@id/txtM3"
-        app:layout_constraintStart_toStartOf="@id/txtM3"/>
+        android:textSize="20sp"
+        app:layout_constraintTop_toBottomOf="@id/txtM2"
+        app:layout_constraintStart_toEndOf="@id/txtM3"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="10dp"/>
 
-    <!-- BUTTON CONNECT -->
+    <!-- ========================= -->
+    <!-- BUTTON -->
+    <!-- ========================= -->
+
     <Button
         android:id="@+id/btnConnect"
         android:layout_width="0dp"
         android:layout_height="50dp"
-        android:text="@string/btn_connect"
+        android:text="CONNECT"
         android:textColor="#FFFFFF"
         android:backgroundTint="#2E7D32"
         app:layout_constraintBottom_toTopOf="@id/btnStop"
@@ -192,12 +173,11 @@
         app:layout_constraintEnd_toStartOf="@id/btnDisconnect"
         android:layout_margin="8dp"/>
 
-    <!-- DISCONNECT -->
     <Button
         android:id="@+id/btnDisconnect"
         android:layout_width="0dp"
         android:layout_height="50dp"
-        android:text="@string/btn_disconnect_short"
+        android:text="DISCONNECT"
         android:textColor="#FFFFFF"
         android:backgroundTint="#C62828"
         app:layout_constraintBottom_toTopOf="@id/btnStop"
@@ -205,12 +185,11 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:layout_margin="8dp"/>
 
-    <!-- EMERGENCY -->
     <Button
         android:id="@+id/btnStop"
         android:layout_width="0dp"
         android:layout_height="60dp"
-        android:text="@string/btn_emergency"
+        android:text="EMERGENCY STOP"
         android:textColor="#FFFFFF"
         android:backgroundTint="#FF6F00"
         app:layout_constraintBottom_toBottomOf="parent"
