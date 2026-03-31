@@ -10,6 +10,12 @@ public class TelemetryData {
     private static final float MAX_TEMP = 120f;
 
     // =========================
+    // 🔴 FLAGS + ERROR (เพิ่มใหม่)
+    // =========================
+    public int flags;
+    public int error;
+
+    // =========================
     // 🔴 DATA
     // =========================
     public float volt;
@@ -23,15 +29,20 @@ public class TelemetryData {
     public float tempR;
 
     // ==================================================
-    // CONSTRUCTOR
+    // 🔴 CONSTRUCTOR (แก้ใหม่ทั้งหมด)
     // ==================================================
-    public TelemetryData(float volt,
+    public TelemetryData(int flags, int error,
+                         float volt,
                          float m1,
                          float m2,
                          float m3,
                          float m4,
                          float tempL,
                          float tempR) {
+
+        // 🔴 เก็บ flags + error
+        this.flags = flags;
+        this.error = error;
 
         // 🔴 sanitize ค่า
         this.volt = clamp(volt, 0, MAX_VOLT);
@@ -57,7 +68,26 @@ public class TelemetryData {
     }
 
     // ==================================================
-    // 🔴 ALERT SYSTEM (ใช้กับ UI สีแดง)
+    // 🔴 SYSTEM STATUS (ใช้ flags)
+    // ==================================================
+    public boolean isLocked() {
+        return (flags & 0x01) != 0;
+    }
+
+    public boolean isFailsafe() {
+        return (flags & 0x02) != 0;
+    }
+
+    public boolean isEngineRunning() {
+        return (flags & 0x04) != 0;
+    }
+
+    public boolean hasErrorCode() {
+        return error != 0;
+    }
+
+    // ==================================================
+    // 🔴 ALERT SYSTEM
     // ==================================================
     public boolean isVoltageLow() {
         return volt < 20f;
@@ -72,7 +102,7 @@ public class TelemetryData {
     }
 
     public boolean hasError() {
-        return isVoltageLow() || isCurrentHigh() || isTempHigh();
+        return hasErrorCode() || isVoltageLow() || isCurrentHigh() || isTempHigh();
     }
 
     // ==================================================
@@ -81,8 +111,10 @@ public class TelemetryData {
     public boolean isValid() {
 
         if (Float.isNaN(volt)) return false;
+
         if (Float.isNaN(m1) || Float.isNaN(m2) ||
                 Float.isNaN(m3) || Float.isNaN(m4)) return false;
+
         if (Float.isNaN(tempL) || Float.isNaN(tempR)) return false;
 
         return true;

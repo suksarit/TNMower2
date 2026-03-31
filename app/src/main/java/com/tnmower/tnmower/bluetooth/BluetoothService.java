@@ -26,14 +26,13 @@ public class BluetoothService extends Service {
     private InputStream input;
     private OutputStream output;
 
-    private final String MAC = "00:21:13:00:00:00";
+    private String MAC = "00:21:13:00:00:00";
 
     private final UUID UUID_SPP =
             UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final AtomicBoolean connected = new AtomicBoolean(false);
-
     private final AtomicBoolean processingQueue = new AtomicBoolean(false);
 
     private String lastStatus = "";
@@ -42,7 +41,7 @@ public class BluetoothService extends Service {
     private static final long RX_TIMEOUT = 3000;
 
     // =========================
-    // 🔴 BINDER (เพิ่มใหม่)
+    // 🔴 BINDER
     // =========================
     public class LocalBinder extends Binder {
         public BluetoothService getService() {
@@ -71,6 +70,9 @@ public class BluetoothService extends Service {
 
     private final ConcurrentLinkedQueue<Byte> commandQueue = new ConcurrentLinkedQueue<>();
 
+    // =========================
+    // 🔴 TELEMETRY
+    // =========================
     public interface OnTelemetryListener {
         void onTelemetry(int flags, int error,
                          float volt,
@@ -84,14 +86,34 @@ public class BluetoothService extends Service {
         telemetryListener = listener;
     }
 
+    // =========================
     @Override
     public void onCreate() {
         super.onCreate();
+
         btAdapter = BluetoothAdapter.getDefaultAdapter();
         startForegroundService();
         new Thread(this::connectionLoop).start();
     }
 
+    // =========================
+    // 🔴 รับ MAC จาก Activity
+    // =========================
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+
+        if (intent != null) {
+            String macFromIntent = intent.getStringExtra("MAC");
+
+            if (macFromIntent != null && !macFromIntent.isEmpty()) {
+                MAC = macFromIntent;
+            }
+        }
+
+        return START_STICKY;
+    }
+
+    // =========================
     private void startForegroundService() {
 
         NotificationManager nm =
@@ -119,6 +141,7 @@ public class BluetoothService extends Service {
         sendPriorityCommand((byte) 0x10);
     }
 
+    // =========================
     private void connectionLoop() {
 
         while (running.get()) {
@@ -206,6 +229,7 @@ public class BluetoothService extends Service {
         }
     }
 
+    // =========================
     private void rxLoop() {
 
         byte[] buffer = new byte[32];
@@ -296,7 +320,9 @@ public class BluetoothService extends Service {
         }
     }
 
+    // =========================
     public void queueCommand(byte cmd) {
+        commandQueue.clear();
         commandQueue.add(cmd);
         processQueue();
     }

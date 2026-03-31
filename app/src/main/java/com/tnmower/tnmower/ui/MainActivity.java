@@ -142,7 +142,7 @@ public class MainActivity extends AppCompatActivity {
             stopReconnect();
 
             if (btService != null) {
-                btService.sendStop(); // 🔴 สำคัญ
+                btService.sendStop();
             }
 
             stopService(new Intent(this, BluetoothService.class));
@@ -158,20 +158,16 @@ public class MainActivity extends AppCompatActivity {
 
         btnStop.setOnClickListener(v -> sendStopCommand());
 
-        BluetoothService.setTelemetryListener((volt, m1, m2, m3, m4, tL, tR) -> {
-            TelemetryData raw = new TelemetryData(volt, m1, m2, m3, m4, tL, tR);
+        BluetoothService.setTelemetryListener((flags, error, volt, m1, m2, m3, m4, tL, tR) -> {
+
+            TelemetryData raw = new TelemetryData(
+                    flags, error,
+                    volt, m1, m2, m3, m4,
+                    tL, tR
+            );
+
             updateUI(raw);
         });
-
-        if (!selectedMAC.isEmpty()) {
-            startBluetooth(selectedMAC);
-        }
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        // 🔴 ไม่ bind ซ้ำ
     }
 
     @Override
@@ -204,6 +200,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             startService(intent);
         }
+
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
@@ -271,6 +268,10 @@ public class MainActivity extends AppCompatActivity {
         smoothData.m2 = smooth(raw.m2, smoothData.m2, alphaCurrent);
         smoothData.m3 = smooth(raw.m3, smoothData.m3, alphaCurrent);
         smoothData.m4 = smooth(raw.m4, smoothData.m4, alphaCurrent);
+
+        // 🔴 FIX สำคัญ (ห้ามลืม)
+        smoothData.flags = raw.flags;
+        smoothData.error = raw.error;
 
         lastUiUpdate = now;
 
