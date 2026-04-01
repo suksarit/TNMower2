@@ -501,11 +501,42 @@ public class BluetoothService extends Service {
                     float tempL = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
                     float tempR = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
 
+                    // =========================
+// 🔴 SAFE CALLBACK (กัน crash UI)
+// =========================
                     if (telemetryListener != null) {
-                        telemetryListener.onTelemetry(flags, error,
-                                volt, m1, m2, m3, m4, tempL, tempR);
-                    }
+                        try {
 
+                            // 🔴 validate ก่อนยิง
+                            if (Float.isNaN(volt) ||
+                                    Float.isNaN(m1) || Float.isNaN(m2) ||
+                                    Float.isNaN(m3) || Float.isNaN(m4) ||
+                                    Float.isNaN(tempL) || Float.isNaN(tempR)) {
+
+                                continue;
+                            }
+
+                            telemetryListener.onTelemetry(
+                                    flags,
+                                    error,
+                                    volt,
+                                    m1,
+                                    m2,
+                                    m3,
+                                    m4,
+                                    tempL,
+                                    tempR
+                            );
+
+                        } catch (Throwable t) {
+
+                            // 🔴 กัน crash ทั้งแอพ
+                            sendStatus("CALLBACK_ERROR");
+
+                            // ❗ สำคัญ: ตัด listener ทิ้งทันที
+                            telemetryListener = null;
+                        }
+                    }
                     continue;
                 }
 
@@ -609,7 +640,12 @@ public class BluetoothService extends Service {
 
             lastCmdTime = System.currentTimeMillis();
 
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+
+            sendStatus("TX_ERROR");
+
+            connected.set(false);
+            safeClose();
         }
     }
 
@@ -625,18 +661,30 @@ public class BluetoothService extends Service {
     }
 
     private void safeClose() {
+
         try {
-            if (input != null) input.close();
-        } catch (Exception ignored) {
-        }
+            if (input != null) {
+                input.close();
+                input = null;
+            }
+        } catch (Exception ignored) {}
+
         try {
-            if (output != null) output.close();
-        } catch (Exception ignored) {
-        }
+            if (output != null) {
+                output.close();
+                output = null;
+            }
+        } catch (Exception ignored) {}
+
         try {
-            if (socket != null) socket.close();
-        } catch (Exception ignored) {
-        }
+            if (socket != null) {
+                socket.close();
+                socket = null;
+            }
+        } catch (Exception ignored) {}
+
+        // 🔴 RESET STATE (สำคัญ)
+        connected.set(false);
     }
 
     @Override
