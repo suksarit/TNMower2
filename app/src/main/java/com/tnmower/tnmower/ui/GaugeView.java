@@ -14,19 +14,26 @@ public class GaugeView extends View {
     private float velocity = 0f;        // 🔴 inertia จริง
     private float peakValue = 0f;
 
-    private float minValue = 0f;
-    private float maxValue = 100f;
+    private final float minValue = 0f;
+    private final float maxValue = 100f;
 
     private String unit = "";
 
-    private Paint bgPaint, fgPaint, textPaint;
-    private Paint rimPaint, glowPaint, needlePaint, tickPaint, peakPaint, centerPaint;
+    private final Paint bgPaint;
+    private final Paint fgPaint;
+    private final Paint textPaint;
+    private final Paint rimPaint;
+    private final Paint glowPaint;
+    private final Paint needlePaint;
+    private final Paint tickPaint;
+    private final Paint peakPaint;
+    private final Paint centerPaint;
 
-    private RectF rect = new RectF();
+    private final RectF rect = new RectF();
 
     private float strokeWidth = 18f;
 
-    private boolean isPreview;
+    private final boolean isPreview;
 
     private boolean flashState = false;
     private long lastFlashTime = 0;

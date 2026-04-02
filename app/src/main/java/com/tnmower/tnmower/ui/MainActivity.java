@@ -1,21 +1,31 @@
 package com.tnmower.tnmower.ui;
 
-import android.content.*;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.os.*;
-import android.widget.*;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.widget.Button;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 
 import com.tnmower.tnmower.R;
 import com.tnmower.tnmower.bluetooth.BluetoothService;
 import com.tnmower.tnmower.model.TelemetryData;
-
-import java.util.Locale;
+import androidx.core.content.ContextCompat;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -38,14 +48,62 @@ public class MainActivity extends AppCompatActivity {
     private boolean connecting = false;
 
     private Runnable reconnectRunnable;
-    private int reconnectAttempts = 0;
+    // =========================
+// 🔴 STATUS RECEIVER (SAFE)
+// =========================
+    private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
 
+            String status = intent.getStringExtra("status");
+
+            if (status == null) return;
+
+            // =========================
+            // 🔴 CONNECTED
+            // =========================
+            if ("CONNECTED".equals(status)) {
+
+                connected = true;
+                connecting = false;
+
+                stopReconnect();   // 🔴 กัน handler ค้าง
+
+                txtStatus.setText("CONNECTED");
+                txtStatus.setTextColor(Color.GREEN);
+            }
+
+            // =========================
+            // 🔴 DISCONNECTED
+            // =========================
+            else if ("DISCONNECTED".equals(status)) {
+
+                connected = false;
+                connecting = false;
+
+                stopReconnect();   // 🔴 หยุด handler
+
+                // 🔴 ไม่ไป stopService ซ้ำแล้ว (กันชน)
+                txtStatus.setText("DISCONNECTED");
+                txtStatus.setTextColor(Color.RED);
+            }
+
+            // =========================
+            // 🔴 STATUS อื่น
+            // =========================
+            else {
+
+                txtStatus.setText(status);
+            }
+
+            updateButtonState();
+        }
+    };
+    private int reconnectAttempts = 0;
     private TelemetryData smoothData = null;
     private long lastUiUpdate = 0;
-
     private BluetoothService btService = null;
     private boolean isBound = false;
-
     // =========================
     // SERVICE
     // =========================
@@ -63,37 +121,6 @@ public class MainActivity extends AppCompatActivity {
             btService = null;
         }
     };
-
-    // =========================
-    // STATUS RECEIVER
-    // =========================
-    private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-
-            String status = intent.getStringExtra("status");
-
-            if ("CONNECTED".equals(status)) {
-                connected = true;
-                connecting = false;
-                reconnectAttempts = 0;
-                stopReconnect();
-            }
-
-            if ("DISCONNECTED".equals(status)) {
-                connected = false;
-                connecting = false;
-                scheduleReconnect();
-            }
-
-            updateStatusText(status);
-            updateButtonState();
-        }
-    };
-
-    private boolean isReceiverRegistered = false;
-
-    // =========================
     // DEVICE SELECT
     // =========================
     private final ActivityResultLauncher<Intent> deviceLauncher =
@@ -112,10 +139,31 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
+    // STATUS RECEIVER
+    // =========================
+    // =========================
+
+    private boolean isReceiverRegistered = false;
+
+    // =========================
+    // onCreate
+    // =========================
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        // =========================
+// 🔴 Android 13+ Notification Permission
+// =========================
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+
+                requestPermissions(new String[]{
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                }, 2001);
+            }
+        }
 
         requestBluetoothPermission();
 
@@ -140,8 +188,14 @@ public class MainActivity extends AppCompatActivity {
 
         updateButtonState();
 
+        // 🔴 หน่วง start Bluetooth กัน crash ตอนเปิด
+        // 🔴 ปิด auto connect กัน crash loop
         if (!selectedMAC.isEmpty()) {
-            startBluetooth(selectedMAC);
+
+            txtStatus.setText("READY (PRESS CONNECT)");
+            txtStatus.setTextColor(Color.GRAY);
+
+            // ❗ รอ user กด connect เอง
         }
 
         btnConnect.setOnClickListener(v -> {
@@ -177,11 +231,38 @@ public class MainActivity extends AppCompatActivity {
         });
 
         btnStop.setOnClickListener(v -> sendStopCommand());
+    }
+
+    // =========================
+    // 🔴 สำคัญ: listener ต้องอยู่ใน onStart
+    // =========================
+    @Override
+    protected void onStart() {
+        super.onStart();
 
         BluetoothService.setTelemetryListener((flags, error, volt, m1, m2, m3, m4, tL, tR) -> {
-            TelemetryData raw = new TelemetryData(flags, error, volt, m1, m2, m3, m4, tL, tR);
-            updateUI(raw);
+
+            try {
+                TelemetryData raw = new TelemetryData(
+                        flags, error,
+                        volt, m1, m2, m3, m4,
+                        tL, tR
+                );
+
+                updateUI(raw);
+
+            } catch (Throwable ignored) {
+            }
         });
+    }    // =========================
+
+    // =========================
+    // 🔴 ตัด listener ตอนออก
+    // =========================
+    @Override
+    protected void onStop() {
+        super.onStop();
+        BluetoothService.setTelemetryListener(null);
     }
 
     private boolean hasPermission() {
@@ -203,12 +284,32 @@ public class MainActivity extends AppCompatActivity {
 
     private void startBluetooth(String mac) {
 
-        if (connecting) return;
+        // =========================
+        // 🔴 HARD RESET ก่อนเริ่มใหม่ (สำคัญที่สุด)
+        // =========================
+        try {
+            if (isBound) {
+                unbindService(serviceConnection);
+                isBound = false;
+            }
+        } catch (Exception ignored) {
+        }
 
-        if (mac == null || mac.isEmpty()) {
-            deviceLauncher.launch(new Intent(this, DeviceListActivity.class));
+        try {
+            stopService(new Intent(this, BluetoothService.class));
+        } catch (Exception ignored) {
+        }
+
+        // =========================
+        // 🔴 VALIDATE MAC
+        // =========================
+        if (mac == null || mac.length() < 17) {
+            txtStatus.setText("INVALID MAC");
+            txtStatus.setTextColor(Color.RED);
             return;
         }
+
+        if (connecting) return;
 
         connecting = true;
         connected = false;
@@ -218,12 +319,18 @@ public class MainActivity extends AppCompatActivity {
 
         updateButtonState();
 
+        // =========================
+        // 🔴 START SERVICE ใหม่
+        // =========================
         Intent intent = new Intent(this, BluetoothService.class);
         intent.putExtra("MAC", mac);
 
         startService(intent);
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
 
+        // =========================
+        // 🔴 TIMEOUT
+        // =========================
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
 
             if (!connected) {
@@ -233,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
                 txtStatus.setText(getString(R.string.status_failed));
                 txtStatus.setTextColor(Color.RED);
 
-                scheduleReconnect();
+                // 🔴 ไม่ reconnect อัตโนมัติแล้ว
                 updateButtonState();
             }
 
@@ -242,31 +349,22 @@ public class MainActivity extends AppCompatActivity {
 
     private void scheduleReconnect() {
 
-        if (selectedMAC == null || selectedMAC.isEmpty()) {
-            deviceLauncher.launch(new Intent(this, DeviceListActivity.class));
-            return;
+        // =========================
+        // 🔴 SAFE MODE: ปิด auto reconnect กัน crash loop
+        // =========================
+
+        // 🔴 reset state
+        connecting = false;
+
+        // 🔴 หยุด reconnect ทั้งหมด
+        if (reconnectRunnable != null) {
+            reconnectHandler.removeCallbacks(reconnectRunnable);
+            reconnectRunnable = null;
         }
 
-        if (reconnectAttempts >= MAX_RECONNECT) {
-            txtStatus.setText("RECONNECT LIMIT");
-            txtStatus.setTextColor(Color.RED);
-            return;
-        }
-
-        reconnectAttempts++;
-
-        int delay;
-        if (reconnectAttempts < 3) delay = 2000;
-        else if (reconnectAttempts < 5) delay = 4000;
-        else delay = 8000;
-
-        reconnectRunnable = () -> {
-            if (!connected && !connecting) {
-                startBluetooth(selectedMAC);
-            }
-        };
-
-        reconnectHandler.postDelayed(reconnectRunnable, delay);
+        // 🔴 แจ้งสถานะให้ user กดเอง
+        txtStatus.setText("CONNECT FAILED (PRESS CONNECT)");
+        txtStatus.setTextColor(Color.RED);
     }
 
     private void stopReconnect() {
@@ -314,39 +412,7 @@ public class MainActivity extends AppCompatActivity {
             txtM3.setText(getString(R.string.format_m3, smoothData.m3));
             txtM4.setText(getString(R.string.format_m4, smoothData.m4));
 
-            if (raw.isLocked()) {
-                txtStatus.setText(getString(R.string.status_lock));
-                txtStatus.setTextColor(Color.RED);
-            } else if (raw.isFailsafe()) {
-                txtStatus.setText(getString(R.string.status_failsafe));
-                txtStatus.setTextColor(Color.YELLOW);
-            } else if (raw.isEngineRunning()) {
-                txtStatus.setText(getString(R.string.status_running));
-                txtStatus.setTextColor(Color.GREEN);
-            } else {
-                txtStatus.setText(getString(R.string.status_idle));
-                txtStatus.setTextColor(Color.GRAY);
-            }
-
-            if (raw.hasErrorCode()) {
-                txtStatus.setText(getString(R.string.status_error_code, raw.error));
-                txtStatus.setTextColor(Color.RED);
-            }
-
-            if (raw.isVoltageLow()) {
-                txtStatus.setText(getString(R.string.status_low_volt));
-                txtStatus.setTextColor(Color.RED);
-            }
-
-            if (raw.isCurrentHigh()) {
-                txtStatus.setText(getString(R.string.status_high_current));
-                txtStatus.setTextColor(Color.RED);
-            }
-
-            if (raw.isTempHigh()) {
-                txtStatus.setText(getString(R.string.status_over_temp));
-                txtStatus.setTextColor(Color.RED);
-            }
+            txtStatus.setText("RUNNING");
         });
     }
 
@@ -368,12 +434,17 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
 
         if (!isReceiverRegistered) {
+
+            IntentFilter filter = new IntentFilter("TNMOWER_STATUS");
+
+            // 🔴 ใช้ ContextCompat แทน (แก้ Lint 100%)
             ContextCompat.registerReceiver(
                     this,
                     statusReceiver,
-                    new IntentFilter("TNMOWER_STATUS"),
+                    filter,
                     ContextCompat.RECEIVER_NOT_EXPORTED
             );
+
             isReceiverRegistered = true;
         }
     }
@@ -387,4 +458,5 @@ public class MainActivity extends AppCompatActivity {
             isReceiverRegistered = false;
         }
     }
+
 }

@@ -51,7 +51,7 @@ public class BluetoothService extends Service {
     private int lastSeq = -1;
     private int txSeq = 0;
     private int waitingAck = -1;
-    private int reconnectFailCount = 0;  // 🔴 นับจำนวน reconnect fail
+    private final int reconnectFailCount = 0;  // 🔴 นับจำนวน reconnect fail
     private long lastCmdTime = 0;
     private int retryCount = 0;
     private byte lastCmdSent = 0;
@@ -72,7 +72,16 @@ public class BluetoothService extends Service {
 
         btAdapter = BluetoothAdapter.getDefaultAdapter();
         startForegroundService();
-        new Thread(this::connectionLoop).start();
+        // 🔴 กัน thread ซ้อน
+        if (!running.get()) {
+            running.set(true);
+
+            new Thread(() -> {
+                try {
+                    connectionLoop();
+                } catch (Throwable ignored) {}
+            }).start();
+        }
     }
 
     // =========================
@@ -81,6 +90,19 @@ public class BluetoothService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
+        // =========================
+        // 🔴 RESET STATE ก่อน connect ใหม่ (สำคัญมาก)
+        // =========================
+        connected.set(false);
+        waitingAck = -1;
+        retryCount = 0;
+        commandQueue.clear();
+
+        safeClose();  // 🔥 ปิด socket เก่าทันที
+
+        // =========================
+        // 🔴 รับ MAC ใหม่
+        // =========================
         if (intent != null) {
             String macFromIntent = intent.getStringExtra("MAC");
 
@@ -89,7 +111,7 @@ public class BluetoothService extends Service {
             }
         }
 
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
 
     // =========================
@@ -122,8 +144,6 @@ public class BluetoothService extends Service {
 
     // =========================
     private void connectionLoop() {
-
-        long lastReconnectAttempt = 0;
 
         while (running.get()) {
 
@@ -160,7 +180,9 @@ public class BluetoothService extends Service {
                             try {
                                 sendCommandInternal(lastCmdSent, true);
                             } catch (Throwable t) {
+
                                 sendStatus("CMD_ERROR");
+
                                 connected.set(false);
                                 safeClose();
                             }
@@ -178,53 +200,22 @@ public class BluetoothService extends Service {
                 }
 
                 // =========================
-                // 🔴 AUTO RECONNECT (ไม่ spam)
+                // 🔴 ❌ ปิด AUTO RECONNECT ทั้งหมด
                 // =========================
                 if (!connected.get()) {
 
-                    long delay;
+                    // 🔴 ไม่ connect เองแล้ว
+                    // รอ Activity สั่ง startBluetooth() เท่านั้น
 
-                    // 🔴 exponential backoff
-                    if (reconnectFailCount < 3) {
-                        delay = 3000;   // 3 วิ
-                    } else if (reconnectFailCount < 6) {
-                        delay = 5000;   // 5 วิ
-                    } else {
-                        delay = 10000;  // 10 วิ
-                    }
-
-                    if (now - lastReconnectAttempt > delay) {
-
-                        lastReconnectAttempt = now;
-
-                        try {
-
-                            sendStatus("RECONNECTING");
-                            connect();
-
-// 🔴 เช็คว่าต่อสำเร็จจริงไหม
-                            if (connected.get()) {
-                                reconnectFailCount = 0;
-                            } else {
-                                reconnectFailCount++;
-                            }
-
-                        } catch (Throwable t) {
-
-                            reconnectFailCount++;
-
-                            sendStatus("RECONNECT_FAIL");
-
-                            connected.set(false);
-                            safeClose();
-                        }
-                    }
+                    SystemClock.sleep(200);
+                    continue;
                 }
 
             } catch (Throwable t) {
 
                 // 🔴 กัน loop ตาย
                 sendStatus("FATAL_LOOP");
+
                 connected.set(false);
                 safeClose();
             }
@@ -238,7 +229,17 @@ public class BluetoothService extends Service {
 // FILE: BluetoothService.java
 // หน้าที่: เชื่อมต่อแบบกัน crash + แยกสถานะชัดเจน
 // =========================
-    private void connect() {
+    private synchronized void connect() {
+
+        // =========================
+        // 🔴 กัน connect ซ้อน (สำคัญที่สุด)
+        // =========================
+        if (connected.get()) {
+            return;
+        }
+
+        // 🔴 ปิดของเก่าทันที (กัน socket ซ้อน)
+        safeClose();
 
         try {
 
@@ -275,26 +276,6 @@ public class BluetoothService extends Service {
             }
 
             // =========================
-            // 🔴 FILTER DEVICE TYPE
-            // =========================
-            try {
-                BluetoothClass btClass = device.getBluetoothClass();
-
-                if (btClass != null) {
-                    int dc = btClass.getDeviceClass();
-
-                    if (dc == BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES ||
-                            dc == BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER ||
-                            dc == BluetoothClass.Device.PERIPHERAL_KEYBOARD ||
-                            dc == BluetoothClass.Device.PERIPHERAL_POINTING) {
-
-                        sendStatus("INVALID_DEVICE");
-                        return;
-                    }
-                }
-            } catch (Throwable ignored) {}
-
-            // =========================
             // 🔴 CREATE SOCKET
             // =========================
             try {
@@ -305,7 +286,7 @@ public class BluetoothService extends Service {
             }
 
             // =========================
-            // 🔴 CONNECT
+            // 🔴 CONNECT (กัน crash)
             // =========================
             try {
                 socket.connect();
@@ -328,7 +309,7 @@ public class BluetoothService extends Service {
             }
 
             // =========================
-            // 🔴 HANDSHAKE (นิ่ง + กัน edge case)
+            // 🔴 HANDSHAKE
             // =========================
             try {
 
@@ -336,7 +317,6 @@ public class BluetoothService extends Service {
 
                 for (int attempt = 0; attempt < 2; attempt++) {
 
-                    // ส่ง handshake
                     output.write(new byte[]{0x55, (byte) 0xAA});
                     output.flush();
 
@@ -348,7 +328,6 @@ public class BluetoothService extends Service {
                     while (System.currentTimeMillis() - start < 1000) {
 
                         try {
-
                             if (r1 == -1 && input.available() > 0) {
                                 r1 = input.read();
                             }
@@ -357,7 +336,6 @@ public class BluetoothService extends Service {
                                 r2 = input.read();
                                 break;
                             }
-
                         } catch (Exception ignored) {}
 
                         SystemClock.sleep(5);
@@ -384,7 +362,7 @@ public class BluetoothService extends Service {
             }
 
             // =========================
-            // 🔴 SUCCESS (ของเดิมทั้งหมด)
+            // 🔴 SUCCESS
             // =========================
             connected.set(true);
             lastRxTime = System.currentTimeMillis();
@@ -395,7 +373,12 @@ public class BluetoothService extends Service {
 
             sendStatus("CONNECTED");
 
-            new Thread(this::rxLoop).start();
+            // 🔴 กัน thread ซ้อน
+            new Thread(() -> {
+                try {
+                    rxLoop();
+                } catch (Throwable ignored) {}
+            }).start();
 
         } catch (Throwable t) {
 

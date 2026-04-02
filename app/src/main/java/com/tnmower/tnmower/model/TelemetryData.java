@@ -115,9 +115,7 @@ public class TelemetryData {
         if (Float.isNaN(m1) || Float.isNaN(m2) ||
                 Float.isNaN(m3) || Float.isNaN(m4)) return false;
 
-        if (Float.isNaN(tempL) || Float.isNaN(tempR)) return false;
-
-        return true;
+        return !Float.isNaN(tempL) && !Float.isNaN(tempR);
     }
 
     // ==================================================
