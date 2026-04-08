@@ -64,6 +64,11 @@ public class MainActivity extends AppCompatActivity {
 
             runOnUiThread(() -> {
 
+                // 🔴 FIX: กัน crash ตอน Activity ยังไม่พร้อม
+                if (isFinishing() || isDestroyed()) return;
+
+                if (txtStatus == null) return;
+
                 switch (status) {
 
                     case "CONNECTED":
@@ -116,6 +121,9 @@ public class MainActivity extends AppCompatActivity {
     private long lastUiUpdate = 0;
     private BluetoothService btService = null;
     private boolean isBound = false;
+    // 🔴 FIX: กัน callback เก่า / race condition
+    private volatile long currentSessionId = 0;
+
     // =========================
     // SERVICE
     // =========================
@@ -129,14 +137,20 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
+
             isBound = false;
             btService = null;
 
             connected = false;
             connecting = false;
 
-            txtStatus.setText("SERVICE LOST");
-            txtStatus.setTextColor(Color.RED);
+            if (isFinishing() || isDestroyed()) return;
+
+            try {
+                txtStatus.setText("SERVICE LOST");
+                txtStatus.setTextColor(Color.RED);
+            } catch (Throwable ignored) {
+            }
 
             updateButtonState();
         }
@@ -166,10 +180,28 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+
         // =========================
-// 🔴 Android 13+ Notification Permission
-// =========================
+        // 🔴 FIX: RESET SERVICE กัน crash ค้าง (สำคัญมาก)
+        // =========================
+        try {
+
+            // 🔴 FIX: ปิด receiver ก่อน kill service
+            if (isReceiverRegistered) {
+                unregisterReceiver(statusReceiver);
+                isReceiverRegistered = false;
+            }
+
+            stopService(new Intent(this, BluetoothService.class));
+
+        } catch (Exception ignored) {
+        }
+
+        setContentView(R.layout.activity_main);
+
+        // =========================
+        // 🔴 Android 13+ Notification Permission
+        // =========================
         if (Build.VERSION.SDK_INT >= 33) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -182,10 +214,19 @@ public class MainActivity extends AppCompatActivity {
 
         requestBluetoothPermission();
 
+        // =========================
+        // 🔴 RESET STATE กัน crash loop
+        // =========================
+        connecting = false;
+        connected = false;
+        isBound = false;
+
         SharedPreferences sp = getSharedPreferences("TN_MOWER", MODE_PRIVATE);
         selectedMAC = sp.getString("MAC", "");
 
-        // bind UI
+        // =========================
+        // 🔴 BIND UI
+        // =========================
         txtVolt = findViewById(R.id.txtVolt);
         txtStatus = findViewById(R.id.txtStatus);
 
@@ -200,19 +241,27 @@ public class MainActivity extends AppCompatActivity {
         btnConnect = findViewById(R.id.btnConnect);
         btnDisconnect = findViewById(R.id.btnDisconnect);
         btnStop = findViewById(R.id.btnStop);
+        btnRetry = findViewById(R.id.btnRetry);
 
         updateButtonState();
 
-        // 🔴 หน่วง start Bluetooth กัน crash ตอนเปิด
-        // 🔴 ปิด auto connect กัน crash loop
+        // =========================
+        // 🔴 STATUS เริ่มต้น
+        // =========================
         if (!selectedMAC.isEmpty()) {
 
             txtStatus.setText("READY (PRESS CONNECT)");
             txtStatus.setTextColor(Color.GRAY);
 
-            // ❗ รอ user กด connect เอง
+        } else {
+
+            txtStatus.setText("NO DEVICE");
+            txtStatus.setTextColor(Color.RED);
         }
 
+        // =========================
+        // 🔴 CONNECT
+        // =========================
         btnConnect.setOnClickListener(v -> {
 
             if (connecting || connected) return;
@@ -226,6 +275,9 @@ public class MainActivity extends AppCompatActivity {
             deviceLauncher.launch(new Intent(this, DeviceListActivity.class));
         });
 
+        // =========================
+        // 🔴 DISCONNECT (FIX crash loop)
+        // =========================
         btnDisconnect.setOnClickListener(v -> {
 
             stopReconnect();
@@ -234,21 +286,25 @@ public class MainActivity extends AppCompatActivity {
                 if (btService != null) {
                     btService.sendStop();
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
 
-            // 🔴 สำคัญ: unbind ก่อน
+            // 🔴 unbind ก่อนเสมอ
             try {
                 if (isBound) {
                     unbindService(serviceConnection);
                     isBound = false;
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
 
-            // 🔴 แล้วค่อย stop service
+            // 🔴 kill service ทิ้งเลย
             try {
                 stopService(new Intent(this, BluetoothService.class));
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
 
+            // 🔴 reset state
             connected = false;
             connecting = false;
 
@@ -258,11 +314,19 @@ public class MainActivity extends AppCompatActivity {
             txtStatus.setTextColor(Color.RED);
         });
 
-        btnRetry = findViewById(R.id.btnRetry);
-
+        // =========================
+        // 🔴 RETRY (FIX state ค้าง)
+        // =========================
         btnRetry.setOnClickListener(v -> {
 
-            if (connecting || isBound) return;
+            // 🔴 reset state ให้ชัวร์
+            connecting = false;
+            connected = false;
+
+            try {
+                stopService(new Intent(this, BluetoothService.class));
+            } catch (Exception ignored) {
+            }
 
             txtStatus.setText("READY");
             txtStatus.setTextColor(Color.GRAY);
@@ -270,6 +334,9 @@ public class MainActivity extends AppCompatActivity {
             updateButtonState();
         });
 
+        // =========================
+        // 🔴 STOP
+        // =========================
         btnStop.setOnClickListener(v -> sendStopCommand());
     }
 
@@ -281,6 +348,28 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
 
+        // =========================
+        // 🔴 FIX: ปิด BroadcastReceiver
+        // =========================
+        try {
+            if (isReceiverRegistered) {
+                unregisterReceiver(statusReceiver);
+                isReceiverRegistered = false;
+            }
+        } catch (Exception ignored) {
+        }
+
+        // =========================
+        // 🔴 FIX: ตัด Telemetry listener
+        // =========================
+        try {
+            BluetoothService.setTelemetryListener(null);
+        } catch (Exception ignored) {
+        }
+
+        // =========================
+        // 🔴 FIX: unbind service
+        // =========================
         try {
             if (isBound) {
                 unbindService(serviceConnection);
@@ -289,46 +378,135 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
 
+        // =========================
+        // 🔴 FIX: stop service (กันค้าง)
+        // =========================
         try {
             stopService(new Intent(this, BluetoothService.class));
         } catch (Exception ignored) {
         }
+
+        // =========================
+        // 🔴 RESET STATE กันเปิดใหม่พัง
+        // =========================
+        connected = false;
+        connecting = false;
     }
+
 
     @Override
     protected void onStart() {
         super.onStart();
 
+        // 🔴 กันกรณี Activity กำลังจะถูกปิด/ยังไม่พร้อม
+        if (isFinishing() || isDestroyed()) return;
+
+        // 🔴 ตั้ง listener แบบปลอดภัย
         BluetoothService.setTelemetryListener((flags, error, volt, m1, m2, m3, m4, tL, tR) -> {
 
             try {
-                TelemetryData raw = new TelemetryData(
+
+                // 🔴 กัน callback ยิงหลัง Activity ถูกทำลาย
+                if (isFinishing() || isDestroyed()) return;
+
+                final TelemetryData raw = new TelemetryData(
                         flags, error,
                         volt, m1, m2, m3, m4,
                         tL, tR
                 );
 
-                updateUI(raw);
+                // 🔴 บังคับเข้าฝั่ง UI thread + guard ซ้ำ
+                runOnUiThread(() -> {
+
+                    if (isFinishing() || isDestroyed()) return;
+
+                    try {
+                        updateUI(raw);
+                    } catch (Throwable ignored) {
+                        // 🔴 กัน UI crash ทุกกรณี
+                    }
+                });
 
             } catch (Throwable ignored) {
+                // 🔴 กัน crash จาก callback ทั้งหมด
             }
         });
-    }    // =========================
+    }
 
-    // =========================
-    // 🔴 ตัด listener ตอนออก
-    // =========================
     @Override
     protected void onStop() {
         super.onStop();
-        BluetoothService.setTelemetryListener(null);
+
+        // =========================
+        // 🔴 FIX: ตัด Telemetry callback กัน crash
+        // =========================
+        try {
+            BluetoothService.setTelemetryListener(null);
+        } catch (Exception ignored) {
+        }
+
+        // =========================
+        // 🔴 FIX: ปิด BroadcastReceiver (กันยิงใส่ UI ตอนปิด)
+        // =========================
+        try {
+            if (isReceiverRegistered) {
+                unregisterReceiver(statusReceiver);
+                isReceiverRegistered = false;
+            }
+        } catch (Exception ignored) {
+        }
+
+        // =========================
+        // 🔴 FIX: หยุด reconnect handler
+        // =========================
+        try {
+            if (reconnectRunnable != null) {
+                reconnectHandler.removeCallbacks(reconnectRunnable);
+                reconnectRunnable = null;
+            }
+        } catch (Exception ignored) {
+        }
+
+        // =========================
+        // 🔴 FIX: reset state กันเพี้ยนตอนกลับเข้าใหม่
+        // =========================
+        connecting = false;
+        connected = false;
     }
 
     private boolean hasPermission() {
+
+        // =========================
+        // 🔴 ANDROID 12+ (API 31+)
+        // =========================
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-                    == PackageManager.PERMISSION_GRANTED;
+
+            boolean connectGranted =
+                    checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+                            == PackageManager.PERMISSION_GRANTED;
+
+            boolean scanGranted =
+                    checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN)
+                            == PackageManager.PERMISSION_GRANTED;
+
+            return connectGranted && scanGranted;
         }
+
+        // =========================
+        // 🔴 ANDROID 6 - 11 (API 23-30)
+        // =========================
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+
+            boolean locationGranted =
+                    checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                            == PackageManager.PERMISSION_GRANTED;
+
+            return locationGranted;
+        }
+
+        // =========================
+        // 🔴 ต่ำกว่า Android 6
+        // =========================
         return true;
     }
 
@@ -343,7 +521,20 @@ public class MainActivity extends AppCompatActivity {
 
     private void startBluetooth(String mac) {
 
-        // 🔴 HARD RESET
+        // =========================
+        // 🔴 GUARD: Activity state
+        // =========================
+        if (isFinishing() || isDestroyed()) return;
+
+        // =========================
+        // 🔴 TOKEN กัน callback เก่า (สำคัญมาก)
+        // =========================
+        final long sessionId = System.currentTimeMillis();
+        currentSessionId = sessionId;
+
+        // =========================
+        // 🔴 HARD RESET (กันค้าง + กัน crash loop)
+        // =========================
         try {
             if (isBound) {
                 unbindService(serviceConnection);
@@ -357,38 +548,64 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception ignored) {
         }
 
-        // 🔴 VALIDATE
+        try {
+            reconnectHandler.removeCallbacksAndMessages(null);
+        } catch (Exception ignored) {
+        }
+
+        // =========================
+        // 🔴 VALIDATE MAC
+        // =========================
         if (mac == null || mac.length() < 17) {
+
             txtStatus.setText("INVALID MAC");
             txtStatus.setTextColor(Color.RED);
+
+            connecting = false;
+            connected = false;
+
+            updateButtonState();
             return;
         }
 
+        // =========================
+        // 🔴 กันกดซ้ำ
+        // =========================
         if (connecting) return;
 
         connecting = true;
         connected = false;
 
-        txtStatus.setText(getString(R.string.status_connecting));
+        txtStatus.setText("CONNECTING...");
         txtStatus.setTextColor(Color.YELLOW);
 
         updateButtonState();
 
+        // =========================
+        // 🔴 START SERVICE
+        // =========================
         Intent intent = new Intent(this, BluetoothService.class);
         intent.putExtra("MAC", mac);
 
         try {
+
             startService(intent);
+
             boolean ok = bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
 
             if (!ok) {
-                throw new Exception("Bind failed");
+                throw new RuntimeException("Bind failed");
             }
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
 
             connecting = false;
             connected = false;
+
+            try {
+                stopService(new Intent(this, BluetoothService.class));
+            } catch (Exception ignored) {
+            }
 
             txtStatus.setText("START FAIL");
             txtStatus.setTextColor(Color.RED);
@@ -397,35 +614,101 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // 🔴 TIMEOUT
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+        // =========================
+        // 🔴 TIMEOUT (กัน race จริง)
+        // =========================
+        reconnectHandler.postDelayed(() -> {
+
+            // 🔴 กัน callback เก่า
+            if (sessionId != currentSessionId) return;
 
             if (isFinishing() || isDestroyed()) return;
-            if (!connecting) return;
 
-            if (!connected) {
+            if (connecting && !connected) {
 
                 connecting = false;
 
-                txtStatus.setText("FAILED - PRESS CONNECT");
+                txtStatus.setText("TIMEOUT");
                 txtStatus.setTextColor(Color.RED);
 
                 updateButtonState();
+
+                try {
+                    if (isBound) {
+                        unbindService(serviceConnection);
+                        isBound = false;
+                    }
+                } catch (Exception ignored) {
+                }
+
+                try {
+                    stopService(new Intent(this, BluetoothService.class));
+                } catch (Exception ignored) {
+                }
             }
 
         }, CONNECT_TIMEOUT);
     }
 
     private void stopReconnect() {
-        if (reconnectRunnable != null) {
-            reconnectHandler.removeCallbacks(reconnectRunnable);
-            reconnectRunnable = null;
+
+        // =========================
+        // 🔴 FIX: ล้าง callback ทั้งหมด
+        // =========================
+        try {
+            reconnectHandler.removeCallbacksAndMessages(null);
+        } catch (Exception ignored) {
         }
+
+        // =========================
+        // 🔴 FIX: reset runnable
+        // =========================
+        reconnectRunnable = null;
+
+        // =========================
+        // 🔴 FIX: reset state กันค้าง
+        // =========================
+        connecting = false;
+
+        // ❗ ไม่แตะ connected (ให้ service เป็นตัวบอก)
     }
 
     private void sendStopCommand() {
-        if (btService != null && isBound) {
+
+        // =========================
+        // 🔴 GUARD: Activity state
+        // =========================
+        if (isFinishing() || isDestroyed()) return;
+
+        // =========================
+        // 🔴 GUARD: service state
+        // =========================
+        if (btService == null || !isBound) return;
+
+        // =========================
+        // 🔴 GUARD: ต้อง connected เท่านั้น
+        // =========================
+        if (!connected) return;
+
+        try {
+
             btService.sendStop();
+
+        } catch (Throwable e) {
+
+            // 🔴 FIX: กัน crash ถ้า service พัง
+            try {
+                stopService(new Intent(this, BluetoothService.class));
+            } catch (Exception ignored) {
+            }
+
+            connected = false;
+            connecting = false;
+
+            txtStatus.setText("STOP FAIL");
+            txtStatus.setTextColor(Color.RED);
+
+            updateButtonState();
         }
     }
 
@@ -433,7 +716,7 @@ public class MainActivity extends AppCompatActivity {
 
         long now = System.currentTimeMillis();
         if (now - lastUiUpdate < UI_INTERVAL) return;
-        if (!raw.isValid()) return;
+        if (raw == null || !raw.isValid()) return;
 
         if (smoothData == null) smoothData = raw;
 
@@ -451,17 +734,27 @@ public class MainActivity extends AppCompatActivity {
 
         runOnUiThread(() -> {
 
-            txtVolt.setText(getString(R.string.format_voltage, smoothData.volt));
+            // 🔴 FIX: กัน crash
+            if (isFinishing() || isDestroyed()) return;
 
-            txtTempL.setText(getString(R.string.format_temp_l, smoothData.tempL));
-            txtTempR.setText(getString(R.string.format_temp_r, smoothData.tempR));
+            if (txtVolt == null) return;
 
-            txtM1.setText(getString(R.string.format_m1, smoothData.m1));
-            txtM2.setText(getString(R.string.format_m2, smoothData.m2));
-            txtM3.setText(getString(R.string.format_m3, smoothData.m3));
-            txtM4.setText(getString(R.string.format_m4, smoothData.m4));
+            try {
 
-            txtStatus.setText("RUNNING");
+                txtVolt.setText(getString(R.string.format_voltage, smoothData.volt));
+
+                txtTempL.setText(getString(R.string.format_temp_l, smoothData.tempL));
+                txtTempR.setText(getString(R.string.format_temp_r, smoothData.tempR));
+
+                txtM1.setText(getString(R.string.format_m1, smoothData.m1));
+                txtM2.setText(getString(R.string.format_m2, smoothData.m2));
+                txtM3.setText(getString(R.string.format_m3, smoothData.m3));
+                txtM4.setText(getString(R.string.format_m4, smoothData.m4));
+
+                txtStatus.setText("RUNNING");
+
+            } catch (Throwable ignored) {
+            }
         });
     }
 
@@ -470,32 +763,81 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateButtonState() {
-        btnConnect.setEnabled(!connected && !connecting);
-        btnDisconnect.setEnabled(connected);
-        btnRetry.setEnabled(!connecting && !connected);
+
+        // =========================
+        // 🔴 GUARD: Activity state
+        // =========================
+        if (isFinishing() || isDestroyed()) return;
+
+        // =========================
+        // 🔴 FIX: บังคับทำบน UI thread
+        // =========================
+        runOnUiThread(() -> {
+
+            try {
+
+                if (isFinishing() || isDestroyed()) return;
+
+                // 🔴 normalize state กันเพี้ยน
+                boolean isConnecting = connecting;
+                boolean isConnected = connected;
+
+                if (isConnecting && isConnected) {
+                    // ❗ state ผิด → reset
+                    isConnecting = false;
+                }
+
+                // =========================
+                // 🔴 CONNECT BUTTON
+                // =========================
+                if (btnConnect != null) {
+                    btnConnect.setEnabled(!isConnected && !isConnecting);
+                }
+
+                // =========================
+                // 🔴 DISCONNECT BUTTON
+                // =========================
+                if (btnDisconnect != null) {
+                    btnDisconnect.setEnabled(isConnected);
+                }
+
+                // =========================
+                // 🔴 RETRY BUTTON
+                // =========================
+                if (btnRetry != null) {
+                    btnRetry.setEnabled(!isConnecting && !isConnected);
+                }
+
+            } catch (Throwable ignored) {
+                // 🔴 กัน crash ทุกกรณี
+            }
+        });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
 
+        if (isFinishing() || isDestroyed()) return;
+
         try {
 
-            if (!isReceiverRegistered) {
+            if (isReceiverRegistered) return;
 
-                IntentFilter filter = new IntentFilter("TNMOWER_STATUS");
+            IntentFilter filter = new IntentFilter("TNMOWER_STATUS");
 
-                ContextCompat.registerReceiver(
-                        this,
-                        statusReceiver,
-                        filter,
-                        ContextCompat.RECEIVER_NOT_EXPORTED
-                );
+            // 🔴 FIX: ใช้ ContextCompat → Lint หาย
+            ContextCompat.registerReceiver(
+                    this,
+                    statusReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+            );
 
-                isReceiverRegistered = true;
-            }
+            isReceiverRegistered = true;
 
-        } catch (Exception ignored) {
+        } catch (Throwable e) {
+            isReceiverRegistered = false;
         }
     }
 
@@ -503,38 +845,113 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
 
+        // =========================
+        // 🔴 FIX: ป้องกัน state ไม่พร้อม
+        // =========================
+        if (isFinishing() || isDestroyed()) {
+            // ยังต้อง cleanup ต่อด้านล่าง
+        }
+
+        // =========================
+        // 🔴 FIX: ปิด BroadcastReceiver
+        // =========================
         try {
             if (isReceiverRegistered) {
                 unregisterReceiver(statusReceiver);
                 isReceiverRegistered = false;
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
         }
+
+        // =========================
+        // 🔴 FIX: ตัด Telemetry callback กันยิงใส่ UI
+        // =========================
+        try {
+            BluetoothService.setTelemetryListener(null);
+        } catch (Throwable ignored) {
+        }
+
+        // =========================
+        // 🔴 FIX: หยุด handler ทุกตัว (timeout/reconnect)
+        // =========================
+        try {
+            reconnectHandler.removeCallbacksAndMessages(null);
+        } catch (Throwable ignored) {
+        }
+
+        // =========================
+        // 🔴 FIX: reset state กันเพี้ยนตอนกลับเข้าใหม่
+        // =========================
+        connecting = false;
+        // ❗ ไม่บังคับ connected = false ที่นี่
+        // ให้ Service เป็นตัวบอกสถานะจริง
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
-        if (requestCode == 1001) {
+        // =========================
+        // 🔴 GUARD: Activity state
+        // =========================
+        if (isFinishing() || isDestroyed()) return;
 
-            boolean granted = true;
+        if (requestCode != 1001) return;
 
-            for (int r : grantResults) {
-                if (r != PackageManager.PERMISSION_GRANTED) {
-                    granted = false;
-                    break;
+        // =========================
+        // 🔴 FIX: กัน array ว่าง
+        // =========================
+        if (grantResults == null || grantResults.length == 0) {
+
+            runOnUiThread(() -> {
+                if (txtStatus != null) {
+                    txtStatus.setText("PERMISSION ERROR");
+                    txtStatus.setTextColor(Color.RED);
                 }
-            }
+            });
 
-            if (granted) {
-                txtStatus.setText("READY");
-                txtStatus.setTextColor(Color.GREEN);
-            } else {
-                txtStatus.setText("NO PERMISSION");
-                txtStatus.setTextColor(Color.RED);
+            return;
+        }
+
+        // =========================
+        // 🔴 CHECK RESULT
+        // =========================
+        boolean granted = true;
+
+        for (int r : grantResults) {
+            if (r != PackageManager.PERMISSION_GRANTED) {
+                granted = false;
+                break;
             }
         }
-    }
-}
 
+        final boolean finalGranted = granted;
+
+        // =========================
+        // 🔴 UPDATE UI SAFE
+        // =========================
+        runOnUiThread(() -> {
+
+            if (isFinishing() || isDestroyed()) return;
+            if (txtStatus == null) return;
+
+            if (finalGranted) {
+
+                txtStatus.setText("READY");
+                txtStatus.setTextColor(Color.GREEN);
+
+            } else {
+
+                txtStatus.setText("NO PERMISSION");
+                txtStatus.setTextColor(Color.RED);
+
+                // 🔴 reset state กันค้าง
+                connecting = false;
+                connected = false;
+
+                updateButtonState();
+            }
+        });
+    }
+
+}
