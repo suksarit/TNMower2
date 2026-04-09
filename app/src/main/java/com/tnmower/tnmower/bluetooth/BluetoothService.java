@@ -325,16 +325,16 @@ public class BluetoothService extends Service {
             if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
                     != PackageManager.PERMISSION_GRANTED) {
 
-                sendStatus("NO_PERMISSION");
+                if (serviceAlive.get()) sendStatus("NO_PERMISSION");
                 connecting.set(false);
                 return;
             }
         }
 
-        sendStatus("CONNECTING");
+        if (serviceAlive.get()) sendStatus("CONNECTING");
 
         if (btAdapter == null || !btAdapter.isEnabled()) {
-            sendStatus("BT_OFF");
+            if (serviceAlive.get()) sendStatus("BT_OFF");
             connecting.set(false);
             return;
         }
@@ -350,32 +350,27 @@ public class BluetoothService extends Service {
         try {
             device = btAdapter.getRemoteDevice(MAC);
         } catch (Throwable e) {
-            sendStatus("INVALID_MAC");
+            if (serviceAlive.get()) sendStatus("INVALID_MAC");
             connecting.set(false);
             return;
         }
 
         // =========================
-        // 🔴 FILTER DEVICE (ปรับใหม่)
+        // 🔴 FILTER DEVICE
         // =========================
-        String name = null;
         int type = BluetoothDevice.DEVICE_TYPE_UNKNOWN;
-
-        try { name = device.getName(); } catch (Throwable ignored) {}
         try { type = device.getType(); } catch (Throwable ignored) {}
 
-        // 🔴 กัน BLE
         if (type == BluetoothDevice.DEVICE_TYPE_LE) {
-            sendStatus("BLE_DEVICE");
+            if (serviceAlive.get()) sendStatus("BLE_DEVICE");
             connecting.set(false);
             return;
         }
 
-        // 🔴 กัน device แปลก (แต่ไม่ล็อค HC อย่างเดียว)
         if (type != BluetoothDevice.DEVICE_TYPE_CLASSIC &&
                 type != BluetoothDevice.DEVICE_TYPE_DUAL) {
 
-            sendStatus("INVALID_DEVICE");
+            if (serviceAlive.get()) sendStatus("INVALID_DEVICE");
             connecting.set(false);
             return;
         }
@@ -384,7 +379,7 @@ public class BluetoothService extends Service {
         // 🔴 BLACKLIST
         // =========================
         if (MAC.equals(lastFailedMAC) && sameDeviceFailCount >= MAX_FAIL_BEFORE_BLOCK) {
-            sendStatus("DEVICE_BLOCKED");
+            if (serviceAlive.get()) sendStatus("DEVICE_BLOCKED");
             connecting.set(false);
             return;
         }
@@ -404,7 +399,7 @@ public class BluetoothService extends Service {
         }
 
         if (tmpSocket == null) {
-            sendStatus("SOCKET_FAIL");
+            if (serviceAlive.get()) sendStatus("SOCKET_FAIL");
             connecting.set(false);
             return;
         }
@@ -417,7 +412,7 @@ public class BluetoothService extends Service {
 
                 finalSocket.connect();
 
-// 🔴 กัน service ตายระหว่าง connect
+                // 🔴 guard หลัง connect
                 if (!serviceAlive.get()) {
                     try { finalSocket.close(); } catch (Throwable ignored) {}
                     return;
@@ -453,21 +448,22 @@ public class BluetoothService extends Service {
 
             } catch (Throwable e) {
 
-                sendStatus("CONNECT_FAIL");
+                if (!serviceAlive.get()) return;
+
+                if (serviceAlive.get()) sendStatus("CONNECT_FAIL");
 
                 connecting.set(false);
                 connected.set(false);
 
                 try {
                     finalSocket.close();
-                    SystemClock.sleep(100); // 🔴 FIX native ค้าง
+                    SystemClock.sleep(100);
                 } catch (Throwable ignored) {}
 
                 safeClose();
 
                 reconnectFailCount++;
 
-                // 🔴 TRACK FAIL
                 if (MAC.equals(lastFailedMAC)) {
                     sameDeviceFailCount++;
                 } else {
@@ -475,7 +471,6 @@ public class BluetoothService extends Service {
                     sameDeviceFailCount = 1;
                 }
 
-                // 🔴 RESET BT (กันพัง Android ใหม่)
                 if (sameDeviceFailCount >= MAX_FAIL_BEFORE_BT_RESET) {
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
                         restartBluetoothAdapter();
@@ -484,7 +479,7 @@ public class BluetoothService extends Service {
 
                 if (reconnectFailCount >= 3) {
 
-                    sendStatus("STOPPED");
+                    if (serviceAlive.get()) sendStatus("STOPPED");
 
                     new Thread(() -> {
                         SystemClock.sleep(300);
@@ -504,21 +499,26 @@ public class BluetoothService extends Service {
         connectThread.start();
 
         // =========================
-        // 🔴 TIMEOUT (ปรับใหม่)
+        // 🔴 TIMEOUT THREAD (แก้ครบ)
         // =========================
         new Thread(() -> {
-            if (!serviceAlive.get()) return;
-            SystemClock.sleep(3000); // 🔴 เพิ่มความเสถียร
 
+            if (!serviceAlive.get()) return;
+            if (!connecting.get()) return;
+
+            SystemClock.sleep(3000);
+
+            if (!serviceAlive.get()) return;
+            if (!connecting.get()) return;
             if (sessionId != currentConnectSession) return;
 
             if (connecting.get() && !connected.get()) {
 
-                sendStatus("CONNECT_TIMEOUT");
+                if (serviceAlive.get()) sendStatus("CONNECT_TIMEOUT");
 
                 try {
                     finalSocket.close();
-                    SystemClock.sleep(100); // 🔴 FIX native
+                    SystemClock.sleep(100);
                 } catch (Throwable ignored) {}
 
                 try { connectThread.interrupt(); } catch (Throwable ignored) {}
@@ -532,7 +532,7 @@ public class BluetoothService extends Service {
 
                 if (reconnectFailCount >= 3) {
 
-                    sendStatus("STOPPED");
+                    if (serviceAlive.get()) sendStatus("STOPPED");
 
                     new Thread(() -> {
                         SystemClock.sleep(300);
@@ -553,24 +553,22 @@ public class BluetoothService extends Service {
     private void handleConnected(BluetoothSocket sock) {
 
         // =========================
-        // 🔴 กัน timeout / cancel ซ้อน
+        // 🔴 Guard
         // =========================
-        if (!connecting.get()) {
+        if (!serviceAlive.get() || !connecting.get()) {
             try { sock.close(); } catch (Throwable ignored) {}
             return;
         }
 
         // =========================
-        // 🔴 STREAM (กัน crash เต็ม)
+        // 🔴 STREAM
         // =========================
         try {
 
             socket = sock;
 
             if (socket == null || !socket.isConnected()) {
-                sendStatus("SOCKET_INVALID");
-                connecting.set(false);
-                connected.set(false);
+                if (serviceAlive.get()) sendStatus("SOCKET_INVALID");
                 safeClose();
                 return;
             }
@@ -579,34 +577,27 @@ public class BluetoothService extends Service {
             output = socket.getOutputStream();
 
             if (input == null || output == null) {
-                sendStatus("STREAM_NULL");
-                connecting.set(false);
-                connected.set(false);
+                if (serviceAlive.get()) sendStatus("STREAM_NULL");
                 safeClose();
                 return;
             }
 
         } catch (Throwable e) {
 
-            sendStatus("STREAM_FAIL");
-
-            connecting.set(false);
-            connected.set(false);
-
+            if (serviceAlive.get()) sendStatus("STREAM_FAIL");
             safeClose();
             return;
         }
 
         // =========================
-        // 🔴 HANDSHAKE (กันค้าง + กัน crash)
+        // 🔴 HANDSHAKE (blocking + เสถียรกว่า)
         // =========================
         try {
 
             boolean ok = false;
 
-            for (int attempt = 0; attempt < 2; attempt++) {
+            for (int attempt = 0; attempt < 2 && serviceAlive.get(); attempt++) {
 
-                // 🔴 กัน cancel ระหว่าง handshake
                 if (!connecting.get()) {
                     safeClose();
                     return;
@@ -620,26 +611,15 @@ public class BluetoothService extends Service {
                 int r1 = -1;
                 int r2 = -1;
 
-                while (System.currentTimeMillis() - start < 1000) {
-
-                    if (!connecting.get()) {
-                        safeClose();
-                        return;
-                    }
+                while (System.currentTimeMillis() - start < 1000 && serviceAlive.get()) {
 
                     try {
-
-                        if (input.available() > 0) {
-                            if (r1 == -1) r1 = input.read();
-                            else {
-                                r2 = input.read();
-                                break;
-                            }
-                        }
-
-                    } catch (Throwable ignored) {}
-
-                    SystemClock.sleep(5);
+                        r1 = input.read();
+                        r2 = input.read();
+                        break;
+                    } catch (Throwable ignored) {
+                        SystemClock.sleep(5);
+                    }
                 }
 
                 if (r1 == -1 || r2 == -1) continue;
@@ -651,20 +631,14 @@ public class BluetoothService extends Service {
             }
 
             if (!ok) {
-                sendStatus("HANDSHAKE_FAIL");
-                connecting.set(false);
-                connected.set(false);
+                if (serviceAlive.get()) sendStatus("HANDSHAKE_FAIL");
                 safeClose();
                 return;
             }
 
         } catch (Throwable e) {
 
-            sendStatus("HANDSHAKE_FAIL");
-
-            connecting.set(false);
-            connected.set(false);
-
+            if (serviceAlive.get()) sendStatus("HANDSHAKE_FAIL");
             safeClose();
             return;
         }
@@ -681,10 +655,10 @@ public class BluetoothService extends Service {
         waitingAck = -1;
         retryCount = 0;
 
-        sendStatus("CONNECTED");
+        if (serviceAlive.get()) sendStatus("CONNECTED");
 
         // =========================
-        // 🔴 RX THREAD (กัน crash)
+        // 🔴 RX THREAD (แก้ crash loop)
         // =========================
         rxThread = new Thread(() -> {
 
@@ -694,28 +668,25 @@ public class BluetoothService extends Service {
 
                     if (input == null) break;
 
-                    // 🔴 กัน blocking read ค้าง
-                    if (input.available() > 0) {
-                        rxLoop();
-                    } else {
-                        SystemClock.sleep(5);
-                    }
+                    // 🔴 ใช้ blocking read loop ภายใน rxLoop()
+                    rxLoop();
                 }
 
             } catch (Throwable t) {
 
-                sendStatus("RX_CRASH");
+                if (serviceAlive.get()) sendStatus("RX_CRASH");
 
             } finally {
 
                 try {
-                    sock.close(); // 🔴 บังคับหลุด read()
+                    if (sock != null) sock.close();
                 } catch (Exception ignored) {}
 
                 if (!serviceAlive.get()) return;
 
                 connected.set(false);
                 connecting.set(false);
+
                 safeClose();
             }
 
@@ -729,44 +700,40 @@ public class BluetoothService extends Service {
 
         byte[] buffer = new byte[32];
 
-        while (running.get() && connected.get() && serviceAlive.get()){
+        while (running.get() && connected.get() && serviceAlive.get()) {
 
             try {
 
-                // 🔴 FIX: กัน blocking read
-                if (input == null || input.available() <= 0) {
+                // 🔴 1. กัน null
+                if (input == null) {
                     SystemClock.sleep(5);
-                    return;
+                    continue;
                 }
 
+                // 🔴 2. อ่าน header (blocking แต่ socket.close() จะปลด)
                 int b = input.read();
 
-                if (b == -1) return;
-                if ((b & 0xFF) != 0xAA) return;
+                if (b == -1) break;
+                if ((b & 0xFF) != 0xAA) continue;
 
-                // 🔴 กันค้างตรงนี้ด้วย
-                if (input.available() <= 0) return;
                 int len = input.read();
-
-                if (len <= 0 || len > 24) return;
+                if (len <= 0 || len > 24) continue;
 
                 int read = 0;
-                while (read < len) {
-
-                    if (input.available() <= 0) {
-                        SystemClock.sleep(2);
-                        continue;
-                    }
+                while (read < len && serviceAlive.get()) {
 
                     int r = input.read(buffer, read, len - read);
 
-                    if (r > 0) read += r;
-                    else return;
+                    if (r > 0) {
+                        read += r;
+                    } else {
+                        break;
+                    }
                 }
 
-                // 🔴 CRC
-                if (input.available() < 2) return;
+                if (read < len) continue;
 
+                // 🔴 CRC
                 int crcLow = input.read();
                 int crcHigh = input.read();
                 int crcRx = (crcHigh << 8) | crcLow;
@@ -779,24 +746,26 @@ public class BluetoothService extends Service {
                     crc = CRCUtil.crc16Update(crc, buffer[i] & 0xFF);
                 }
 
-                if ((crc & 0xFFFF) != crcRx) return;
+                if ((crc & 0xFFFF) != crcRx) continue;
 
                 lastRxTime = System.currentTimeMillis();
 
                 int idx = 0;
 
-                if (len < 2) return;
+                if (len < 2) continue;
 
                 int type = buffer[idx++] & 0xFF;
                 int seq = buffer[idx++] & 0xFF;
 
-                if (type == 0x01 && seq == lastSeq) return;
+                if (type == 0x01 && seq == lastSeq) continue;
                 lastSeq = seq;
 
+                // =========================
                 // 🔴 TELEMETRY
+                // =========================
                 if (type == 0x01) {
 
-                    if (len < 18) return;
+                    if (len < 18) continue;
 
                     int flags = buffer[idx++] & 0xFF;
                     int error = buffer[idx++] & 0xFF;
@@ -811,7 +780,7 @@ public class BluetoothService extends Service {
                     float tempL = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
                     float tempR = ((short) ((buffer[idx++] << 8) | (buffer[idx++] & 0xFF)));
 
-                    if (telemetryListener != null) {
+                    if (telemetryListener != null && serviceAlive.get()) {
                         try {
                             telemetryListener.onTelemetry(
                                     flags, error,
@@ -819,15 +788,16 @@ public class BluetoothService extends Service {
                                     tempL, tempR
                             );
                         } catch (Throwable t) {
-                            sendStatus("CALLBACK_ERROR");
                             telemetryListener = null;
                         }
                     }
 
-                    return;
+                    continue;
                 }
 
+                // =========================
                 // 🔴 ACK
+                // =========================
                 if (type == 0x03) {
 
                     if (seq == waitingAck) {
@@ -836,66 +806,165 @@ public class BluetoothService extends Service {
                         processQueue();
                     }
 
-                    return;
+                    continue;
                 }
 
             } catch (Throwable t) {
 
+                // 🔴 กัน crash loop
                 connected.set(false);
                 connecting.set(false);
 
-                sendStatus("RX_ERROR");
+                try {
+                    if (socket != null) socket.close();
+                } catch (Exception ignored) {}
 
                 safeClose();
-                return;
+
+                // 🔴 ห้ามยิง status ถ้า service ตาย
+                if (serviceAlive.get()) {
+                    sendStatus("RX_ERROR");
+                }
+
+                break;
             }
         }
     }
 
     // =========================
     public void queueCommand(byte cmd) {
-        commandQueue.clear();
-        commandQueue.add(cmd);
-        processQueue();
+
+        // 🔴 1. ห้ามทำงานถ้า service ตาย
+        if (!serviceAlive.get()) return;
+
+        try {
+
+            // 🔴 2. เคลียร์ queue แบบปลอดภัย (กัน race)
+            commandQueue.clear();
+
+            // 🔴 3. ใส่คำสั่งล่าสุด
+            commandQueue.add(cmd);
+
+            // 🔴 4. ถ้ายังไม่พร้อม → ไม่ยิงทันที
+            if (!connected.get()) return;
+            if (connecting.get()) return;
+            if (waitingAck != -1) return;
+
+            // 🔴 5. เช็ค socket จริง
+            if (socket == null || !socket.isConnected()) return;
+
+            // 🔴 6. พร้อมแล้วค่อยส่ง
+            processQueue();
+
+        } catch (Throwable ignored) {
+
+            // 🔴 กัน crash loop
+            connected.set(false);
+            safeClose();
+        }
     }
 
     public void sendPriorityCommand(byte cmd) {
 
-        commandQueue.clear();
-        waitingAck = -1;
-        retryCount = 0;
+        // 🔴 1. ห้ามทำงานถ้า service ตาย
+        if (!serviceAlive.get()) return;
 
-        commandQueue.add(cmd);
-        processQueue();
+        try {
+
+            // 🔴 2. reset state แบบปลอดภัย
+            waitingAck = -1;
+            retryCount = 0;
+
+            // 🔴 3. เคลียร์ queue แบบกัน race
+            commandQueue.clear();
+
+            // 🔴 4. เช็คก่อนเพิ่มคำสั่ง
+            if (!connected.get()) {
+                // 🔴 ถ้ายังไม่ connect → แค่เก็บไว้ ไม่ยิงทันที
+                commandQueue.add(cmd);
+                return;
+            }
+
+            if (connecting.get()) {
+                // 🔴 กำลัง connect → รอ
+                commandQueue.add(cmd);
+                return;
+            }
+
+            // 🔴 5. เช็ค socket จริง
+            if (socket == null || !socket.isConnected()) {
+                commandQueue.add(cmd);
+                return;
+            }
+
+            // 🔴 6. ใส่คำสั่ง
+            commandQueue.add(cmd);
+
+            // 🔴 7. ส่ง
+            processQueue();
+
+        } catch (Throwable ignored) {
+
+            // 🔴 กัน crash loop
+            connected.set(false);
+            safeClose();
+        }
     }
-
     private void processQueue() {
 
+        // 🔴 1. ห้ามทำงานถ้า service ตาย
+        if (!serviceAlive.get()) return;
+
+        // 🔴 2. เช็คสถานะก่อน
         if (!connected.get()) return;
+        if (connecting.get()) return; // 🔴 กันชนช่วง connect
         if (waitingAck != -1) return;
 
+        // 🔴 3. lock กัน race
         if (!processingQueue.compareAndSet(false, true)) return;
 
         try {
 
+            // 🔴 4. ดึงคำสั่ง
             Byte cmdObj = commandQueue.poll();
             if (cmdObj == null) return;
 
             byte cmd = cmdObj;
 
+            // 🔴 5. เช็คซ้ำก่อนยิง (double check)
+            if (!serviceAlive.get()) return;
+            if (!connected.get()) return;
+            if (socket == null || !socket.isConnected()) return;
+
+            // 🔴 6. ส่งคำสั่ง
             sendCommandInternal(cmd, false);
 
+        } catch (Throwable ignored) {
+
+            // 🔴 กัน crash loop เงียบ ๆ
+            connected.set(false);
+            safeClose();
+
         } finally {
+
+            // 🔴 7. ปลด lock เสมอ
             processingQueue.set(false);
         }
     }
 
     private void sendCommandInternal(byte cmd, boolean isRetry) {
 
+        // 🔴 1. ห้ามทำงานถ้า service ตาย
+        if (!serviceAlive.get()) return;
+
         try {
 
-            if (output == null || !connected.get()) return;
+            // 🔴 2. เช็ค state ก่อนยิง
+            if (output == null || socket == null) return;
+            if (!connected.get()) return;
+            if (!socket.isConnected()) return;
 
+            // 🔴 3. กันยิงซ้ำตอนรอ ACK
             if (!isRetry && waitingAck != -1) return;
 
             byte[] packet = new byte[16];
@@ -915,9 +984,24 @@ public class BluetoothService extends Service {
             packet[idx++] = (byte) (crc & 0xFF);
             packet[idx++] = (byte) ((crc >> 8) & 0xFF);
 
-            output.write(packet, 0, idx);
-            output.flush();
+            // 🔴 4. เขียนแบบ safe
+            try {
+                output.write(packet, 0, idx);
+                output.flush();
+            } catch (Exception e) {
 
+                // 🔴 socket ตายระหว่างเขียน
+                connected.set(false);
+
+                try {
+                    if (socket != null) socket.close();
+                } catch (Exception ignored) {}
+
+                safeClose();
+                return;
+            }
+
+            // 🔴 5. update state
             if (!isRetry) {
                 waitingAck = txSeq;
                 txSeq = (txSeq + 1) & 0xFF;
@@ -927,12 +1011,21 @@ public class BluetoothService extends Service {
 
             lastCmdTime = System.currentTimeMillis();
 
-        } catch (Exception e) {
+        } catch (Throwable e) {
 
-            sendStatus("TX_ERROR");
-
+            // 🔴 6. กัน crash loop
             connected.set(false);
+
+            try {
+                if (socket != null) socket.close();
+            } catch (Exception ignored) {}
+
             safeClose();
+
+            // 🔴 ❗ ห้ามยิง status ถ้า service ตาย
+            if (serviceAlive.get()) {
+                sendStatus("TX_ERROR");
+            }
         }
     }
 
@@ -974,20 +1067,18 @@ public class BluetoothService extends Service {
 
     private void safeClose() {
 
+        // 🔴 1. ปิดสถานะก่อน (หยุด loop ทันที)
+        connected.set(false);
+        connecting.set(false);
+
+        // 🔴 2. พยายาม kill RX thread ก่อน (กันมันยิงต่อ)
         try {
-            if (input != null) {
-                input.close();
-                input = null;
+            if (rxThread != null) {
+                rxThread.interrupt();
             }
         } catch (Exception ignored) {}
 
-        try {
-            if (output != null) {
-                output.close();
-                output = null;
-            }
-        } catch (Exception ignored) {}
-
+        // 🔴 3. ปิด socket ก่อน (สำคัญสุด → ทำให้ read() หลุด)
         try {
             if (socket != null) {
                 socket.close();
@@ -995,32 +1086,87 @@ public class BluetoothService extends Service {
             }
         } catch (Exception ignored) {}
 
-        connected.set(false);
-        connecting.set(false);
+        // 🔴 4. ปิด input
+        try {
+            if (input != null) {
+                input.close();
+                input = null;
+            }
+        } catch (Exception ignored) {}
+
+        // 🔴 5. ปิด output
+        try {
+            if (output != null) {
+                output.close();
+                output = null;
+            }
+        } catch (Exception ignored) {}
+
+        // 🔴 6. reset state กันค้าง
+        waitingAck = -1;
+        retryCount = 0;
+
+        // 🔴 7. หน่วงเล็กน้อยให้ OS เคลียร์ native socket
+        SystemClock.sleep(50);
     }
 
     // =========================
 // 🔴 FUNCTION: restartBluetoothAdapter()
 // =========================
+    @SuppressLint("MissingPermission")
     private void restartBluetoothAdapter() {
 
         try {
 
+            // 🔴 1. ห้ามทำงานถ้า service ตายแล้ว
+            if (!serviceAlive.get()) return;
+
             if (btAdapter == null) return;
 
+            // 🔴 2. กัน reset รัว
             long now = System.currentTimeMillis();
-
-            if (now - lastBtResetTime < BT_RESET_COOLDOWN) {
-                return; // 🔴 กัน reset รัว
-            }
+            if (now - lastBtResetTime < BT_RESET_COOLDOWN) return;
 
             lastBtResetTime = now;
 
             sendStatus("BT_RESET");
 
-            btAdapter.disable();
-            SystemClock.sleep(1500);
-            btAdapter.enable();
+            // 🔴 3. Android 13+ ห้าม toggle adapter
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // 👉 ทำได้แค่ force disconnect
+                safeClose();
+                return;
+            }
+
+            // 🔴 4. เช็ค permission (Android 12+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+            }
+
+            // 🔴 5. ต้องเปิดอยู่ก่อนถึงจะปิดได้
+            if (!btAdapter.isEnabled()) return;
+
+            // 🔴 6. reset แบบปลอดภัย
+            try {
+                btAdapter.disable();
+            } catch (Throwable ignored) {
+                return;
+            }
+
+            // 🔴 7. รอ adapter ปิดจริง (ไม่ใช้ sleep ล้วน)
+            int wait = 0;
+            while (btAdapter.isEnabled() && wait < 20) {
+                SystemClock.sleep(100);
+                wait++;
+            }
+
+            // 🔴 8. เปิดกลับ
+            try {
+                btAdapter.enable();
+            } catch (Throwable ignored) {}
 
         } catch (Throwable ignored) {}
     }
@@ -1028,21 +1174,29 @@ public class BluetoothService extends Service {
     @Override
     public void onDestroy() {
 
-        // 🔴 1. ปิดสถานะก่อน (หยุดทุก loop)
+        // 🔴 1. ปิดสถานะทั้งหมดก่อน (หยุดทุก loop)
         serviceAlive.set(false);
         running.set(false);
         connected.set(false);
         connecting.set(false);
 
-        // 🔴 2. บังคับ kill socket (สำคัญที่สุด)
+        // 🔴 2. kill RX thread ก่อน (สำคัญ - หยุด loop ก่อนปิด socket)
+        try {
+            if (rxThread != null) {
+                rxThread.interrupt();
+                rxThread = null;
+            }
+        } catch (Exception ignored) {}
+
+        // 🔴 3. บังคับปิด socket ก่อน (ทำให้ read() หลุด)
         try {
             if (socket != null) {
-                socket.close(); // 🔥 ทำให้ input.read() หลุดทันที
+                socket.close();
                 socket = null;
             }
         } catch (Exception ignored) {}
 
-        // 🔴 3. ปิด stream กันค้าง
+        // 🔴 4. ปิด stream
         try {
             if (input != null) {
                 input.close();
@@ -1057,25 +1211,21 @@ public class BluetoothService extends Service {
             }
         } catch (Exception ignored) {}
 
-        // 🔴 4. kill RX thread
-        try {
-            if (rxThread != null) {
-                rxThread.interrupt();
-                rxThread = null;
-            }
-        } catch (Exception ignored) {}
-
-        // 🔴 5. เคลียร์ state
+        // 🔴 5. เคลียร์ queue / state (กัน callback ยิงซ้ำ)
         waitingAck = -1;
         retryCount = 0;
         commandQueue.clear();
 
-        // 🔴 6. ปิดซ้ำอีกรอบกันหลุด (double safety)
+        // 🔴 6. reset flag เพิ่ม (กัน reconnect thread ค้าง)
+        reconnectFailCount = 0;
+        sameDeviceFailCount = 0;
+        lastFailedMAC = "";
+
+        // 🔴 7. ปิดซ้ำอีกรอบ (กันหลุด edge case)
         safeClose();
 
-        // 🔴 ❗ 7. ห้ามเรียก sendStatus หลัง serviceAlive=false
-        // (ของเดิมคุณมี → เป็นจุดเสี่ยง crash)
-        // sendStatus("DISCONNECTED");  ❌ ลบทิ้ง
+        // 🔴 ❗ 8. ห้ามเรียก sendStatus หลัง serviceAlive=false (สำคัญ)
+        // sendStatus("DISCONNECTED"); // ❌ ห้ามใช้
 
         super.onDestroy();
     }
