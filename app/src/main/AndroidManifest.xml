@@ -3,27 +3,37 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ================================================== -->
-    <!-- 🔴 PERMISSIONS -->
+    <!-- 🔴 PERMISSIONS (สำคัญมาก) -->
     <!-- ================================================== -->
 
-    <!-- 🔴 VIBRATE (แก้ error) -->
+    <!-- 🔴 REQUIRED: Foreground Service (ตัวที่ทำให้แอพคุณพัง) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+
+    <!-- 🔴 Android 14+ (แนะนำใส่ไว้เลย) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+
+    <!-- 🔴 VIBRATE -->
     <uses-permission android:name="android.permission.VIBRATE"/>
 
-    <!-- Android 11 และต่ำกว่า -->
-    <uses-permission android:name="android.permission.BLUETOOTH"
+    <!-- 🔴 Android 11 และต่ำกว่า -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30"/>
 
-    <!-- Android 12+ -->
+    <!-- 🔴 Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"/>
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"/>
 
-    <!-- Android 13+ -->
+    <!-- 🔴 Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!-- ================================================== -->
@@ -35,7 +45,7 @@
         android:required="false"/>
 
     <!-- ================================================== -->
-    <!-- APPLICATION -->
+    <!-- 🔴 APPLICATION -->
     <!-- ================================================== -->
 
     <application
@@ -47,10 +57,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.TNMower"
-        tools:targetApi="33">
+        tools:targetApi="34">
 
         <!-- ========================= -->
-        <!-- MAIN ACTIVITY -->
+        <!-- 🔴 MAIN ACTIVITY -->
         <!-- ========================= -->
         <activity
             android:name=".ui.MainActivity"
@@ -64,14 +74,14 @@
         </activity>
 
         <!-- ========================= -->
-        <!-- DEVICE LIST -->
+        <!-- 🔴 DEVICE LIST -->
         <!-- ========================= -->
         <activity
             android:name=".ui.DeviceListActivity"
             android:exported="false" />
 
         <!-- ========================= -->
-        <!-- BLUETOOTH SERVICE -->
+        <!-- 🔴 BLUETOOTH SERVICE -->
         <!-- ========================= -->
         <service
             android:name=".bluetooth.BluetoothService"

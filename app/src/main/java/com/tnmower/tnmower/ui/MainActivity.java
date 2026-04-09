@@ -59,15 +59,22 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceive(Context context, Intent intent) {
 
-            String status = intent.getStringExtra("status");
-            if (status == null) return;
+            try {
 
-            runOnUiThread(() -> {
-
-                // 🔴 FIX: กัน crash ตอน Activity ยังไม่พร้อม
+                // 🔴 1. กัน Activity พัง
                 if (isFinishing() || isDestroyed()) return;
 
+                // 🔴 2. กัน intent พัง
+                if (intent == null) return;
+
+                String status = intent.getStringExtra("status");
+                if (status == null) return;
+
+                // 🔴 3. กัน view ยังไม่ bind
                 if (txtStatus == null) return;
+
+                // 🔴 4. ไม่ใช้ runOnUiThread (สำคัญมาก)
+                // BroadcastReceiver = main thread อยู่แล้ว
 
                 switch (status) {
 
@@ -89,6 +96,10 @@ public class MainActivity extends AppCompatActivity {
                     case "RECONNECT_FAIL":
                     case "NO_PERMISSION":
                     case "INVALID_MAC":
+                    case "CONNECT_TIMEOUT":
+                    case "SOCKET_FAIL":
+                    case "STREAM_FAIL":
+                    case "STREAM_NULL":
 
                         connected = false;
                         connecting = false;
@@ -105,6 +116,14 @@ public class MainActivity extends AppCompatActivity {
                         txtStatus.setTextColor(Color.RED);
                         break;
 
+                    case "STOPPED":
+                        connected = false;
+                        connecting = false;
+
+                        txtStatus.setText("STOPPED");
+                        txtStatus.setTextColor(Color.RED);
+                        break;
+
                     default:
                         txtStatus.setText(status);
                         txtStatus.setTextColor(Color.GRAY);
@@ -112,10 +131,12 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 updateButtonState();
-            });
+
+            } catch (Throwable ignored) {
+                // 🔴 กัน crash 100%
+            }
         }
     };
-
 
     private TelemetryData smoothData = null;
     private long lastUiUpdate = 0;
