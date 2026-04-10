@@ -704,17 +704,52 @@ public class BluetoothService extends Service {
 
             try {
 
-                // 🔴 1. กัน null
                 if (input == null) {
                     SystemClock.sleep(5);
                     continue;
                 }
 
-                // 🔴 2. อ่าน header (blocking แต่ socket.close() จะปลด)
-                int b = input.read();
+                int header = input.read();
+                if (header == -1) break;
 
-                if (b == -1) break;
-                if ((b & 0xFF) != 0xAA) continue;
+                // =====================================================
+                // 🔴 ACK PACKET (0xAB)
+                // =====================================================
+                if ((header & 0xFF) == 0xAB) {
+
+                    int len = input.read();
+                    if (len != 2) continue;
+
+                    int seq = input.read();
+                    int status = input.read();
+
+                    int crcLow = input.read();
+                    int crcHigh = input.read();
+                    int crcRx = (crcHigh << 8) | crcLow;
+
+                    int crc = 0xFFFF;
+                    crc = CRCUtil.crc16Update(crc, 0xAB);
+                    crc = CRCUtil.crc16Update(crc, len);
+                    crc = CRCUtil.crc16Update(crc, seq & 0xFF);
+                    crc = CRCUtil.crc16Update(crc, status & 0xFF);
+
+                    if ((crc & 0xFFFF) != crcRx) continue;
+
+                    if (seq == waitingAck) {
+                        waitingAck = -1;
+                        retryCount = 0;
+                        processQueue();
+                    }
+
+                    continue;
+                }
+
+                // =====================================================
+                // 🔴 TELEMETRY PACKET (0xAA)
+                // =====================================================
+                if ((header & 0xFF) != 0xAA) {
+                    continue;
+                }
 
                 int len = input.read();
                 if (len <= 0 || len > 24) continue;
@@ -733,7 +768,6 @@ public class BluetoothService extends Service {
 
                 if (read < len) continue;
 
-                // 🔴 CRC
                 int crcLow = input.read();
                 int crcHigh = input.read();
                 int crcRx = (crcHigh << 8) | crcLow;
@@ -795,23 +829,8 @@ public class BluetoothService extends Service {
                     continue;
                 }
 
-                // =========================
-                // 🔴 ACK
-                // =========================
-                if (type == 0x03) {
-
-                    if (seq == waitingAck) {
-                        waitingAck = -1;
-                        retryCount = 0;
-                        processQueue();
-                    }
-
-                    continue;
-                }
-
             } catch (Throwable t) {
 
-                // 🔴 กัน crash loop
                 connected.set(false);
                 connecting.set(false);
 
@@ -821,7 +840,6 @@ public class BluetoothService extends Service {
 
                 safeClose();
 
-                // 🔴 ห้ามยิง status ถ้า service ตาย
                 if (serviceAlive.get()) {
                     sendStatus("RX_ERROR");
                 }
